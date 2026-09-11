@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Flatcraft</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="game">
+    <canvas id="canvas"></canvas>
+
+    <div id="hud">
+      <div id="debug"></div>
+    </div>
+
+    <div id="hotbar"></div>
+
+    <div id="overlay" class="hidden">
+      <div class="panel">
+        <h1>Flatcraft</h1>
+        <p class="controls">
+          <span><b>A</b> / <b>D</b> &mdash; move</span>
+          <span><b>Space</b> / <b>W</b> &mdash; jump</span>
+          <span><b>Left click</b> &mdash; mine</span>
+          <span><b>Right click</b> &mdash; place</span>
+          <span><b>1&ndash;9</b> / <b>scroll</b> &mdash; select slot</span>
+          <span><b>F3</b> &mdash; debug info</span>
+        </p>
+        <button id="start">Play</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
