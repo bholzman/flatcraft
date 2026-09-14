@@ -1,43 +1,32 @@
-import { WORLD_W, WORLD_H, SEA_LEVEL, WATER_LEVEL } from './config.js';
-import {
-  AIR, GRASS, DIRT, STONE, SAND, WOOD, LEAVES, BEDROCK, WATER,
-  COAL_ORE, IRON_ORE, GOLD_ORE, DIAMOND_ORE, isSolid,
-} from './blocks.js';
+import { REALMS, LUSH_CAVES_AT, DEEP_DARK_AT, PLAYER_H } from './config.js';
+import { AIR, BEDROCK, isSolid, isLiquid, isDecoration } from './blocks.js';
+import { BIOMES, LAYOUTS, layoutBands, bandIndexAt } from './biomes.js';
+import { generate } from './worldgen.js';
 
-/** Small deterministic PRNG so a seed always regenerates the same world. */
-function mulberry32(seed) {
-  let a = seed >>> 0;
-  return function () {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-/** 1-D value noise: smooth interpolation between per-integer random values. */
-function makeNoise1D(rand) {
-  const table = new Float32Array(1024).map(() => rand());
-  return (x) => {
-    const i = Math.floor(x);
-    const f = x - i;
-    const a = table[((i % 1024) + 1024) % 1024];
-    const b = table[(((i + 1) % 1024) + 1024) % 1024];
-    const t = f * f * (3 - 2 * f);          // smoothstep
-    return a + (b - a) * t;
-  };
-}
-
+/** One realm's block grid, plus the bookkeeping the renderer and physics need. */
 export class World {
-  constructor(seed = Date.now()) {
+  constructor(realm, seed) {
+    const spec = REALMS[realm];
+    if (!spec) throw new Error(`unknown realm: ${realm}`);
+
+    this.realm = realm;
+    this.spec = spec;
     this.seed = seed >>> 0;
-    this.width = WORLD_W;
-    this.height = WORLD_H;
-    this.grid = new Uint8Array(WORLD_W * WORLD_H);
-    this.surface = new Int32Array(WORLD_W);   // topmost non-air y per column (live)
-    this.ground = new Int32Array(WORLD_W);    // generated terrain height per column (fixed)
-    this.generate();
+    this.width = spec.w;
+    this.height = spec.h;
+    this.liquidLevel = spec.liquidLevel;
+
+    this.grid = new Uint8Array(this.width * this.height);
+    this.surface = new Int32Array(this.width);   // topmost non-air y (live)
+    this.ground = new Int32Array(this.width);    // generated terrain height (fixed)
+    this.bands = layoutBands(LAYOUTS[realm], this.width);
+
+    this.spawn = null;      // set by the generator
+    this.portals = [];      // [{ x, y, to }] built by the generator
+
+    generate(this);
+
+    for (let x = 0; x < this.width; x++) this.recalcSurface(x);
   }
 
   idx(x, y) {
@@ -48,11 +37,11 @@ export class World {
     return x >= 0 && y >= 0 && x < this.width && y < this.height;
   }
 
-  /** Out-of-bounds reads: solid below the world, air above/beside it. */
+  /** Out of bounds: solid past the sides and floor, empty above. */
   get(x, y) {
     if (x < 0 || x >= this.width) return BEDROCK;
     if (y < 0) return AIR;
-    if (y >= this.height) return BEDROCK;
+    if (y >= this.height) return this.spec.liquid === null ? AIR : BEDROCK;
     return this.grid[this.idx(x, y)];
   }
 
@@ -63,8 +52,23 @@ export class World {
     return true;
   }
 
+  /** Unchecked write used by the generator; skips the surface recalc. */
+  put(x, y, id) {
+    if (this.inBounds(x, y)) this.grid[this.idx(x, y)] = id;
+  }
+
   isSolidAt(x, y) {
     return isSolid(this.get(x, y));
+  }
+
+  isLiquidAt(x, y) {
+    return isLiquid(this.get(x, y));
+  }
+
+  /** Decorations don't support placement, so builders need to see through them. */
+  isReplaceable(x, y) {
+    const id = this.get(x, y);
+    return id === AIR || isLiquid(id) || isDecoration(id);
   }
 
   recalcSurface(x) {
@@ -77,150 +81,98 @@ export class World {
     this.surface[x] = this.height;
   }
 
-  // ---- generation ----
+  // ---- biome lookup ----
 
-  generate() {
-    const rand = mulberry32(this.seed);
-    const hills = makeNoise1D(rand);
-    const rolling = makeNoise1D(rand);
-    const detail = makeNoise1D(rand);
-    const caveA = makeNoise1D(rand);
-    const caveB = makeNoise1D(rand);
-
-    const heights = new Int32Array(this.width);
-
-    // Each octave is centred on zero so the sum swings both sides of SEA_LEVEL,
-    // which is what lets valleys drop below WATER_LEVEL and form lakes.
-    for (let x = 0; x < this.width; x++) {
-      const h =
-        SEA_LEVEL
-        - (hills(x / 70) - 0.5) * 46
-        - (rolling(x / 26) - 0.5) * 16
-        - (detail(x / 9) - 0.5) * 5;
-      heights[x] = Math.max(6, Math.min(this.height - 12, Math.round(h)));
-    }
-
-    // The terrain baseline stays fixed: foliage above it and mining below it
-    // must not move it, or lighting and the cave backdrop shift with them.
-    this.ground.set(heights);
-
-    for (let x = 0; x < this.width; x++) {
-      const top = heights[x];
-      const beach = top >= WATER_LEVEL - 2;   // ground near the waterline gets sand
-
-      for (let y = 0; y < this.height; y++) {
-        let id = AIR;
-
-        if (y === this.height - 1) {
-          id = BEDROCK;
-        } else if (y > this.height - 4 && rand() < 0.6) {
-          id = BEDROCK;
-        } else if (y === top) {
-          id = beach ? SAND : GRASS;
-        } else if (y > top && y <= top + 4) {
-          id = beach ? SAND : DIRT;
-        } else if (y > top) {
-          id = STONE;
-        } else if (y >= WATER_LEVEL) {
-          id = WATER;                          // low-lying air floods
-        }
-
-        this.grid[this.idx(x, y)] = id;
-      }
-    }
-
-    this.carveCaves(caveA, caveB, heights);
-    this.scatterOres(rand, heights);
-    this.plantTrees(rand, heights);
-
-    for (let x = 0; x < this.width; x++) this.recalcSurface(x);
+  bandAt(x) {
+    return this.bands[bandIndexAt(this.bands, Math.max(0, Math.min(this.width - 1, x | 0)))];
   }
 
-  /** Two offset noise fields; where both are near the middle, carve a tunnel. */
-  carveCaves(caveA, caveB, heights) {
-    for (let x = 0; x < this.width; x++) {
-      for (let y = heights[x] + 5; y < this.height - 5; y++) {
-        const depth = (y - heights[x]) / (this.height - heights[x]);
-        const a = caveA(x / 18 + y / 11);
-        const b = caveB(x / 13 - y / 17);
-        const v = Math.abs(a - b);
-        if (v < 0.055 + depth * 0.035) {
-          this.grid[this.idx(x, y)] = AIR;
-        }
-      }
-    }
+  /** The surface biome for a column. */
+  surfaceBiomeAt(x) {
+    return BIOMES[this.bandAt(x).id];
   }
 
-  scatterOres(rand, heights) {
-    const veins = [
-      { id: COAL_ORE,    tries: 200, minDepth: 4,  maxSize: 7 },
-      { id: IRON_ORE,    tries: 130, minDepth: 18, maxSize: 5 },
-      { id: GOLD_ORE,    tries: 55,  minDepth: 34, maxSize: 4 },
-      { id: DIAMOND_ORE, tries: 24,  minDepth: 50, maxSize: 3 },
-    ];
+  /** The underground biome for a depth; overworld only, null elsewhere. */
+  undergroundBiomeAt(y) {
+    if (this.realm !== 'overworld') return null;
+    if (y < this.height * LUSH_CAVES_AT) return BIOMES.caves;
+    if (y < this.height * DEEP_DARK_AT) return BIOMES.lush_caves;
+    return BIOMES.deep_dark;
+  }
 
-    for (const vein of veins) {
-      for (let n = 0; n < vein.tries; n++) {
-        const x = Math.floor(rand() * this.width);
-        const top = heights[x];
-        const span = this.height - top - vein.minDepth - 4;
-        if (span <= 0) continue;
-        const y = Math.floor(top + vein.minDepth + rand() * span);
-        if (!this.inBounds(x, y) || this.grid[this.idx(x, y)] !== STONE) continue;
+  /**
+   * What biome the player is "in" — the cave band once they're well below the
+   * surface, otherwise the surface band. Drives sky colour and the HUD readout.
+   */
+  biomeAt(x, y) {
+    const below = y - this.ground[Math.max(0, Math.min(this.width - 1, x | 0))];
+    const under = this.undergroundBiomeAt(y);
+    return below > 6 && under ? under : this.surfaceBiomeAt(x);
+  }
 
-        // Random walk to make a blobby vein rather than a single block.
-        let cx = x;
-        let cy = y;
-        const size = 2 + Math.floor(rand() * vein.maxSize);
-        for (let i = 0; i < size; i++) {
-          if (this.inBounds(cx, cy) && this.grid[this.idx(cx, cy)] === STONE) {
-            this.grid[this.idx(cx, cy)] = vein.id;
-          }
-          cx += Math.floor(rand() * 3) - 1;
-          cy += Math.floor(rand() * 3) - 1;
+  /**
+   * Top of the player's box on the first floor below `from` with headroom.
+   * Starts below any realm ceiling -- the Nether's roof is solid, so scanning
+   * from y=0 would otherwise "land" the player on the underside of it.
+   */
+  standingYAt(x, from = 0) {
+    for (let y = from + 2; y < this.height - 1; y++) {
+      if (!isSolid(this.get(x, y))) continue;
+      // Headroom only has to be passable, not empty -- tall grass and flowers
+      // sit in the two cells above almost every grassy column.
+      if (!this.isPassable(x, y - 1) || !this.isPassable(x, y - 2)) continue;
+      return y - PLAYER_H;
+    }
+    return null;
+  }
+
+  /** Nothing there to stand in the way: air or a decoration, but not liquid. */
+  isPassable(x, y) {
+    const id = this.get(x, y);
+    return id === AIR || isDecoration(id);
+  }
+
+  /**
+   * Where to put the player to *see* a column: on its terrain if it's dry, on
+   * the waterline if it's flooded. Used by creative travel, where landing on
+   * the sea bed of an ocean isn't what "go to the ocean" means.
+   */
+  viewpointAt(x) {
+    const start = Math.max(0, Math.min(this.width - 1, x | 0));
+
+    // Step sideways if the obvious spot is inside a tree trunk or a pillar.
+    for (let d = 0; d <= 24; d++) {
+      for (const col of d === 0 ? [start] : [start - d, start + d]) {
+        if (col < 0 || col >= this.width) continue;
+
+        const terrain = this.ground[col];
+        const top = terrain >= this.height
+          ? this.spec.surfaceLevel
+          : (this.liquidLevel >= 0 && terrain > this.liquidLevel ? this.liquidLevel : terrain);
+
+        const y = top - PLAYER_H;
+        if (this.isPassable(col, Math.floor(y)) && this.isPassable(col, Math.floor(y + 1))) {
+          return { x: col + 0.5, y };
         }
       }
     }
+    return { x: start + 0.5, y: this.spec.surfaceLevel - PLAYER_H };
   }
 
-  plantTrees(rand, heights) {
-    let lastTree = -99;
-    for (let x = 4; x < this.width - 4; x++) {
-      if (x - lastTree < 5 || rand() > 0.09) continue;
+  /** A safe standing spot, searching outward from a preferred column. */
+  spawnPoint(preferred = Math.floor(this.width / 2)) {
+    const from = (this.spec.ceiling ?? 0) + 1;
 
-      const top = heights[x];
-      if (this.grid[this.idx(x, top)] !== GRASS) continue;
-
-      const trunk = 4 + Math.floor(rand() * 3);
-      for (let i = 1; i <= trunk; i++) {
-        const y = top - i;
-        if (y >= 0) this.grid[this.idx(x, y)] = WOOD;
-      }
-
-      const crownY = top - trunk;
-      const r = 2;
-      for (let dy = -r; dy <= 1; dy++) {
-        for (let dx = -r; dx <= r; dx++) {
-          if (Math.abs(dx) + Math.abs(dy) > r + 1) continue;
-          const lx = x + dx;
-          const ly = crownY + dy;
-          if (this.inBounds(lx, ly) && this.grid[this.idx(lx, ly)] === AIR) {
-            this.grid[this.idx(lx, ly)] = LEAVES;
-          }
-        }
-      }
-      lastTree = x;
-    }
-  }
-
-  /** A safe standing spot: on top of the surface at the given column. */
-  spawnPoint(x = Math.floor(this.width / 2)) {
-    for (let col = x; col < this.width; col++) {
-      const top = this.surface[col];
-      if (this.get(col, top) !== WATER && top < this.height - 2) {
-        return { x: col + 0.5, y: top - 2 };
+    for (let d = 0; d < this.width; d++) {
+      for (const col of d === 0 ? [preferred] : [preferred - d, preferred + d]) {
+        if (col < 0 || col >= this.width) continue;
+        const y = this.standingYAt(col, from);
+        if (y === null) continue;
+        // Skip anything built on top of the terrain -- trees, pillars, portals.
+        if (Math.abs(y + PLAYER_H - this.ground[col]) > 1.5) continue;
+        return { x: col + 0.5, y };
       }
     }
-    return { x: x + 0.5, y: 0 };
+    return { x: preferred + 0.5, y: from };
   }
 }

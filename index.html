@@ -12,20 +12,42 @@
 
     <div id="hud">
       <div id="debug"></div>
+      <div id="mode"></div>
+      <div id="toast"></div>
     </div>
 
     <div id="hotbar"></div>
+
+    <div id="biomes" class="panel-overlay hidden">
+      <div class="panel-box">
+        <header><h2>Travel</h2><button class="close">&times;</button></header>
+        <div class="body"></div>
+        <footer>Jumps to the middle of that biome's band.</footer>
+      </div>
+    </div>
+
+    <div id="palette" class="panel-overlay hidden">
+      <div class="panel-box wide">
+        <header><h2>Blocks</h2><button class="close">&times;</button></header>
+        <div class="body"></div>
+        <footer>Click a block to load it into the selected hotbar slot.</footer>
+      </div>
+    </div>
 
     <div id="overlay" class="hidden">
       <div class="panel">
         <h1>Flatcraft</h1>
         <p class="controls">
           <span><b>A</b> / <b>D</b> &mdash; move</span>
-          <span><b>Space</b> / <b>W</b> &mdash; jump</span>
-          <span><b>Left click</b> &mdash; mine</span>
-          <span><b>Right click</b> &mdash; place</span>
-          <span><b>1&ndash;9</b> / <b>scroll</b> &mdash; select slot</span>
+          <span><b>Space</b> / <b>W</b> &mdash; jump &middot; fly up</span>
+          <span><b>S</b> / <b>Shift</b> &mdash; fly down</span>
+          <span><b>Left click</b> &mdash; mine &middot; <b>Right click</b> &mdash; place</span>
+          <span><b>1&ndash;9</b> / scroll &mdash; select slot</span>
+          <span><b>G</b> &mdash; survival &rarr; creative &rarr; spectator</span>
+          <span><b>B</b> &mdash; travel to any biome <i>(creative / spectator)</i></span>
+          <span><b>E</b> &mdash; block palette <i>(creative)</i></span>
           <span><b>F3</b> &mdash; debug info</span>
+          <span>Stand in a <b>portal</b> to change realm</span>
         </p>
         <button id="start">Play</button>
       </div>

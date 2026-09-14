@@ -7,6 +7,7 @@ export class Inventory {
   constructor() {
     this.slots = Array.from({ length: HOTBAR_SIZE }, () => ({ id: AIR, count: 0 }));
     this.selected = 0;
+    this.infinite = false;   // creative mode: placing never depletes a slot
     this.onChange = null;
   }
 
@@ -46,12 +47,21 @@ export class Inventory {
   takeSelected() {
     const slot = this.held;
     if (slot.count <= 0) return AIR;
+    if (this.infinite) return slot.id;
 
     const id = slot.id;
     slot.count -= 1;
     if (slot.count === 0) slot.id = AIR;
     this.changed();
     return id;
+  }
+
+  /** Drop `id` straight into the selected slot, replacing what's there. */
+  setSelected(id, count = 1) {
+    const slot = this.held;
+    slot.id = id;
+    slot.count = count;
+    this.changed();
   }
 
   /** Starter kit so there's something to build with before mining. */

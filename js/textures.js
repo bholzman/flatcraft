@@ -1,10 +1,9 @@
-import { TILE } from './config.js';
-import { BLOCKS, ORE_SPECKLE, AIR, GRASS, WOOD, PLANKS, LEAVES, GLASS, WATER } from './blocks.js';
+import { BLOCKS, AIR, block } from './blocks.js';
 
-// Blocks are drawn from small offscreen canvases baked once at load. Keeps the
-// pixel-art look without shipping any image assets.
+// Blocks are drawn from small offscreen canvases baked once at load, so the
+// pixel-art look costs no image assets. One painter per `style` in blocks.js.
 
-const RES = 16;   // texture resolution in pixels, scaled up to TILE on draw
+const RES = 16;
 
 function hexToRgb(hex) {
   const n = parseInt(hex.slice(1), 16);
@@ -15,74 +14,172 @@ function shade(rgb, amount) {
   return rgb.map((c) => Math.max(0, Math.min(255, Math.round(c * amount))));
 }
 
-function rgbCss([r, g, b], a = 1) {
+function css([r, g, b], a = 1) {
   return a === 1 ? `rgb(${r},${g},${b})` : `rgba(${r},${g},${b},${a})`;
 }
 
-/** Deterministic per-pixel jitter so every block of a type looks identical. */
+/** Deterministic per-pixel jitter, so every block of a type looks identical. */
 function noiseAt(x, y, salt) {
-  const n = Math.sin((x * 127.1 + y * 311.7 + salt * 74.7)) * 43758.5453;
+  const n = Math.sin(x * 127.1 + y * 311.7 + salt * 74.7) * 43758.5453;
   return n - Math.floor(n);
 }
 
-function bake(id) {
-  const def = BLOCKS[id];
-  const c = document.createElement('canvas');
-  c.width = c.height = RES;
-  const g = c.getContext('2d');
-
-  if (!def.tint) return c;
-  const base = hexToRgb(def.tint);
-
+/** Fill the tile with speckled base colour. */
+function grain(g, base, salt, spread = 0.28, lo = 0.86) {
   for (let y = 0; y < RES; y++) {
     for (let x = 0; x < RES; x++) {
-      const n = noiseAt(x, y, id);
-      g.fillStyle = rgbCss(shade(base, 0.86 + n * 0.28));
+      g.fillStyle = css(shade(base, lo + noiseAt(x, y, salt) * spread));
       g.fillRect(x, y, 1, 1);
     }
   }
+}
 
-  if (id === GRASS) {
-    // Dirt underside with a ragged grass line on top.
-    const dirt = hexToRgb(BLOCKS[2].tint);
+const PAINTERS = {
+  plain: (g, base, d) => grain(g, base, d.id),
+
+  grass: (g, base, d) => {
+    const soil = hexToRgb(block(d.soil).tint);
+    grain(g, soil, d.soil);
     for (let x = 0; x < RES; x++) {
-      const lip = 4 + Math.floor(noiseAt(x, 0, 99) * 3);
-      for (let y = lip; y < RES; y++) {
-        const n = noiseAt(x, y, 2);
-        g.fillStyle = rgbCss(shade(dirt, 0.86 + n * 0.28));
+      const lip = 4 + Math.floor(noiseAt(x, 0, d.id) * 3);
+      for (let y = 0; y < lip; y++) {
+        g.fillStyle = css(shade(base, 0.86 + noiseAt(x, y, d.id) * 0.28));
         g.fillRect(x, y, 1, 1);
       }
     }
-  }
+  },
 
-  if (id === WOOD) {
-    for (let x = 2; x < RES; x += 5) {
-      g.fillStyle = rgbCss(shade(base, 0.72), 0.8);
-      g.fillRect(x, 0, 1, RES);
+  cobble: (g, base, d) => {
+    grain(g, shade(base, 0.8), d.id, 0.1);
+    for (let i = 0; i < 9; i++) {                       // rounded stones
+      const x = Math.floor(noiseAt(i, 1, d.id) * (RES - 4));
+      const y = Math.floor(noiseAt(i, 2, d.id) * (RES - 4));
+      const w = 3 + Math.floor(noiseAt(i, 3, d.id) * 3);
+      g.fillStyle = css(shade(base, 0.95 + noiseAt(i, 4, d.id) * 0.35));
+      g.fillRect(x, y, w, w);
     }
-  }
+  },
 
-  if (id === PLANKS) {
-    g.fillStyle = rgbCss(shade(base, 0.68), 0.9);
+  layered: (g, base, d) => {
+    grain(g, base, d.id, 0.14);
+    g.fillStyle = css(shade(base, 0.78), 0.7);
+    for (let y = 3; y < RES; y += 4) g.fillRect(0, y, RES, 1);
+  },
+
+  log: (g, base, d) => {
+    grain(g, base, d.id, 0.2);
+    g.fillStyle = css(shade(base, 0.68), 0.75);
+    for (let x = 2; x < RES; x += 5) g.fillRect(x, 0, 1, RES);
+  },
+
+  birch_log: (g, base, d) => {
+    grain(g, base, d.id, 0.12);
+    g.fillStyle = css(shade(base, 0.32), 0.85);
+    for (let i = 0; i < 5; i++) {
+      const y = Math.floor(noiseAt(i, 1, d.id) * RES);
+      const x = Math.floor(noiseAt(i, 2, d.id) * (RES - 5));
+      g.fillRect(x, y, 3 + Math.floor(noiseAt(i, 3, d.id) * 3), 1);
+    }
+  },
+
+  planks: (g, base, d) => {
+    grain(g, base, d.id, 0.18);
+    g.fillStyle = css(shade(base, 0.66), 0.9);
     for (let y = 3; y < RES; y += 5) g.fillRect(0, y, RES, 1);
     g.fillRect(RES / 2, 0, 1, 4);
     g.fillRect(RES / 4, 8, 1, 5);
-  }
+  },
 
-  if (id === LEAVES) {
+  bricks: (g, base, d) => {
+    grain(g, base, d.id, 0.14);
+    g.fillStyle = css(shade(base, 0.6), 0.9);
+    for (let y = 3; y < RES; y += 4) g.fillRect(0, y, RES, 1);
+    for (let row = 0; row < 4; row++) {
+      const x = row % 2 === 0 ? 4 : 11;
+      g.fillRect(x, row * 4, 1, 3);
+    }
+  },
+
+  leaves: (g, base, d) => {
+    grain(g, base, d.id, 0.3);
     for (let i = 0; i < 26; i++) {
-      const x = Math.floor(noiseAt(i, 1, 7) * RES);
-      const y = Math.floor(noiseAt(i, 2, 7) * RES);
-      g.fillStyle = rgbCss(shade(base, 0.7), 0.7);
+      const x = Math.floor(noiseAt(i, 1, d.id) * RES);
+      const y = Math.floor(noiseAt(i, 2, d.id) * RES);
+      g.fillStyle = css(shade(base, 0.66), 0.7);
       g.fillRect(x, y, 2, 2);
     }
-  }
+  },
 
-  if (id === GLASS) {
-    g.clearRect(0, 0, RES, RES);
-    g.fillStyle = rgbCss(base, 0.22);
+  moss: (g, base, d) => {
+    grain(g, base, d.id, 0.34);
+    for (let i = 0; i < 16; i++) {
+      const x = Math.floor(noiseAt(i, 5, d.id) * RES);
+      const y = Math.floor(noiseAt(i, 6, d.id) * RES);
+      g.fillStyle = css(shade(base, 1.28), 0.55);
+      g.fillRect(x, y, 2, 1);
+    }
+  },
+
+  soul: (g, base, d) => {
+    grain(g, base, d.id, 0.22);
+    for (let i = 0; i < 3; i++) {                       // hollow-eyed faces
+      const x = 2 + Math.floor(noiseAt(i, 7, d.id) * (RES - 7));
+      const y = 2 + Math.floor(noiseAt(i, 8, d.id) * (RES - 8));
+      g.fillStyle = css(shade(base, 0.5), 0.85);
+      g.fillRect(x, y, 2, 2);
+      g.fillRect(x + 3, y, 2, 2);
+      g.fillRect(x + 1, y + 4, 3, 1);
+    }
+  },
+
+  magma: (g, base, d) => {
+    grain(g, shade(base, 0.55), d.id, 0.2);
+    for (let i = 0; i < 10; i++) {                      // glowing cracks
+      const x = Math.floor(noiseAt(i, 9, d.id) * (RES - 3));
+      const y = Math.floor(noiseAt(i, 10, d.id) * (RES - 3));
+      g.fillStyle = css(shade(base, 1.9), 0.9);
+      g.fillRect(x, y, 3, 2);
+    }
+  },
+
+  glow: (g, base, d) => {
+    grain(g, base, d.id, 0.26);
+    for (let i = 0; i < 8; i++) {
+      const x = Math.floor(noiseAt(i, 11, d.id) * (RES - 3));
+      const y = Math.floor(noiseAt(i, 12, d.id) * (RES - 3));
+      g.fillStyle = css(shade(base, 1.5), 0.85);
+      g.fillRect(x, y, 2, 2);
+    }
+  },
+
+  sculk: (g, base, d) => {
+    grain(g, base, d.id, 0.2);
+    for (let i = 0; i < 14; i++) {                      // cyan filaments
+      const x = Math.floor(noiseAt(i, 13, d.id) * RES);
+      const y = Math.floor(noiseAt(i, 14, d.id) * RES);
+      g.fillStyle = `rgba(90,220,210,${0.25 + noiseAt(i, 15, d.id) * 0.5})`;
+      g.fillRect(x, y, 1, 1 + Math.floor(noiseAt(i, 16, d.id) * 2));
+    }
+  },
+
+  ore: (g, base, d) => {
+    grain(g, base, d.id);
+    const s = hexToRgb(d.speckle);
+    for (let i = 0; i < 7; i++) {
+      const x = 1 + Math.floor(noiseAt(i, d.id, 13) * (RES - 4));
+      const y = 1 + Math.floor(noiseAt(d.id, i, 29) * (RES - 4));
+      const size = 2 + Math.floor(noiseAt(i, i, d.id) * 2);
+      g.fillStyle = css(s);
+      g.fillRect(x, y, size, size);
+      g.fillStyle = css(shade(s, 1.35), 0.8);
+      g.fillRect(x, y, 1, 1);
+    }
+  },
+
+  glass: (g, base) => {
+    g.fillStyle = css(base, 0.2);
     g.fillRect(0, 0, RES, RES);
-    g.strokeStyle = rgbCss(shade(base, 1.1), 0.75);
+    g.strokeStyle = css(shade(base, 1.1), 0.75);
     g.lineWidth = 1;
     g.strokeRect(0.5, 0.5, RES - 1, RES - 1);
     g.globalAlpha = 0.5;
@@ -91,37 +188,102 @@ function bake(id) {
     g.lineTo(RES - 3, 2);
     g.stroke();
     g.globalAlpha = 1;
-  }
+  },
 
-  if (id === WATER) {
-    g.clearRect(0, 0, RES, RES);
-    g.fillStyle = rgbCss(base, 0.55);
+  liquid: (g, base, d) => {
+    g.fillStyle = css(base, d.emit > 0.5 ? 0.92 : 0.55);
     g.fillRect(0, 0, RES, RES);
-  }
+    for (let i = 0; i < 6; i++) {
+      const y = Math.floor(noiseAt(i, 17, d.id) * RES);
+      g.fillStyle = css(shade(base, 1.25), 0.35);
+      g.fillRect(0, y, RES, 1);
+    }
+  },
 
-  const speckle = ORE_SPECKLE[id];
-  if (speckle) {
-    const srgb = hexToRgb(speckle);
-    for (let i = 0; i < 7; i++) {
-      const x = 1 + Math.floor(noiseAt(i, id, 13) * (RES - 4));
-      const y = 1 + Math.floor(noiseAt(id, i, 29) * (RES - 4));
-      const s = 2 + Math.floor(noiseAt(i, i, id) * 2);
-      g.fillStyle = rgbCss(srgb);
-      g.fillRect(x, y, s, s);
-      g.fillStyle = rgbCss(shade(srgb, 1.35), 0.8);
+  portal: (g, base, d) => {
+    g.fillStyle = css(base, 0.72);
+    g.fillRect(0, 0, RES, RES);
+    for (let i = 0; i < 22; i++) {                      // drifting sparks
+      const x = Math.floor(noiseAt(i, 18, d.id) * RES);
+      const y = Math.floor(noiseAt(i, 19, d.id) * RES);
+      g.fillStyle = `rgba(230,210,255,${0.25 + noiseAt(i, 20, d.id) * 0.6})`;
       g.fillRect(x, y, 1, 1);
     }
-  }
+  },
 
-  return c;
-}
+  column: (g, base, d) => {                             // cactus and the like
+    g.fillStyle = css(shade(base, 0.85));
+    g.fillRect(2, 0, RES - 4, RES);
+    g.fillStyle = css(base);
+    g.fillRect(4, 0, RES - 8, RES);
+    g.fillStyle = css(shade(base, 0.55), 0.8);
+    for (let y = 1; y < RES; y += 4) {
+      g.fillRect(3, y, 1, 2);
+      g.fillRect(RES - 4, y, 1, 2);
+    }
+  },
+
+  plant: (g, base, d) => {                              // tufts rooted at the bottom
+    for (let i = 0; i < 7; i++) {
+      const x = 2 + Math.floor(noiseAt(i, 21, d.id) * (RES - 4));
+      const h = 5 + Math.floor(noiseAt(i, 22, d.id) * 8);
+      g.fillStyle = css(shade(base, 0.8 + noiseAt(i, 23, d.id) * 0.5));
+      g.fillRect(x, RES - h, 1, h);
+      if (h > 8) g.fillRect(x + 1, RES - h + 1, 1, h - 2);
+    }
+  },
+
+  flower: (g, base, d) => {
+    g.fillStyle = '#3f7a32';
+    g.fillRect(RES / 2, RES - 8, 1, 8);
+    g.fillRect(RES / 2 - 2, RES - 5, 2, 1);
+    g.fillStyle = css(base);
+    g.fillRect(RES / 2 - 2, RES - 12, 5, 4);
+    g.fillStyle = css(shade(base, 1.35), 0.9);
+    g.fillRect(RES / 2 - 1, RES - 11, 3, 2);
+  },
+
+  vine: (g, base, d) => {                               // strands hung from the top
+    for (let i = 0; i < 5; i++) {
+      const x = 1 + Math.floor(noiseAt(i, 24, d.id) * (RES - 2));
+      const h = 6 + Math.floor(noiseAt(i, 25, d.id) * 10);
+      g.fillStyle = css(shade(base, 0.85 + noiseAt(i, 26, d.id) * 0.4));
+      g.fillRect(x, 0, 1, h);
+      if (d.emit > 0.5 && noiseAt(i, 27, d.id) > 0.5) {
+        g.fillStyle = css(shade(base, 1.5));
+        g.fillRect(x - 1, h - 2, 3, 3);                 // berry
+      }
+    }
+  },
+
+  flat: (g, base, d) => {                               // lily pads, dripleaf
+    g.fillStyle = css(base);
+    g.fillRect(1, RES - 5, RES - 2, 3);
+    g.fillStyle = css(shade(base, 1.25), 0.8);
+    g.fillRect(2, RES - 5, RES - 4, 1);
+  },
+
+  torch: (g, base) => {
+    g.fillStyle = '#6b4c2b';
+    g.fillRect(RES / 2 - 1, RES - 9, 2, 9);
+    g.fillStyle = css(base);
+    g.fillRect(RES / 2 - 1, RES - 12, 2, 3);
+    g.fillStyle = '#fff3c4';
+    g.fillRect(RES / 2 - 1, RES - 12, 1, 1);
+  },
+};
 
 export const textures = {};
 
 export function bakeAll() {
-  for (const id of Object.keys(BLOCKS).map(Number)) {
-    if (id === AIR) continue;
-    textures[id] = bake(id);
+  for (const d of Object.values(BLOCKS)) {
+    if (d.id === AIR || d.style === 'none' || !d.tint) continue;
+
+    const c = document.createElement('canvas');
+    c.width = c.height = RES;
+    const g = c.getContext('2d');
+    (PAINTERS[d.style] ?? PAINTERS.plain)(g, hexToRgb(d.tint), d);
+    textures[d.id] = c;
   }
 }
 
@@ -135,4 +297,4 @@ export function swatchDataURL(id, size = 32) {
   return c.toDataURL();
 }
 
-export { RES as TEXTURE_RES, TILE };
+export { RES as TEXTURE_RES };
