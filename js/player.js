@@ -3,7 +3,7 @@ import {
   JUMP_SPEED, MAX_FALL_SPEED, COYOTE_TIME, JUMP_BUFFER, PLAYER_W, PLAYER_H,
   LIQUID_DRAG, LIQUID_SINK, SWIM_SPEED, FLY_ACCEL, FLY_SPEED, FLY_DAMP,
 } from './config.js';
-import { isLiquid } from './blocks.js';
+import { isLiquid, LAVA } from './blocks.js';
 
 export class Player {
   constructor(world, spawn) {
@@ -21,6 +21,106 @@ export class Player {
     this.inLiquid = false;
     this.flying = false;
     this.noclip = false;     // spectator: drift straight through the world
+
+    this.maxHealth = 20;
+    this.health = 20;
+    this.invuln = 0;         // i-frames, so one mob can't chain-hit
+    this.hurtFlash = 0;
+    this.effects = {};       // name -> { value, time }
+    this.fallFrom = null;    // y where the current fall started
+    this.lavaBurn = 0;
+    this.dead = false;
+  }
+
+  get centerY() { return this.y + this.h / 2; }
+
+  get alive() { return !this.dead; }
+
+  /** Multiplier or bonus from an active potion effect. */
+  effect(name) {
+    return this.effects[name]?.value ?? null;
+  }
+
+  applyEffect(name, value, duration) {
+    this.effects[name] = { value, time: duration };
+  }
+
+  heal(amount) {
+    this.health = Math.min(this.maxHealth, this.health + amount);
+  }
+
+  /** Returns true if the hit landed (i-frames can swallow it). */
+  hurt(amount, fromX = null, ignoreInvuln = false) {
+    if (this.dead || (!ignoreInvuln && this.invuln > 0)) return false;
+
+    this.health -= amount;
+    this.invuln = 0.55;
+    this.hurtFlash = 0.3;
+
+    if (fromX !== null && !this.flying) {
+      const dir = Math.sign(this.x - fromX) || 1;
+      this.vx = dir * 8;
+      this.vy = Math.min(this.vy, -7);
+    }
+
+    if (this.health <= 0) {
+      this.health = 0;
+      this.dead = true;
+    }
+    return true;
+  }
+
+  respawn(world, spawn) {
+    this.enter(world, spawn);
+    this.health = this.maxHealth;
+    this.dead = false;
+    this.invuln = 1.5;
+    this.effects = {};
+    this.fallFrom = null;
+  }
+
+  /** Timers, fall damage and lava: everything that hurts without a mob attached. */
+  updateVitals(dt, invulnerable) {
+    this.invuln = Math.max(0, this.invuln - dt);
+    this.hurtFlash = Math.max(0, this.hurtFlash - dt);
+
+    for (const [name, e] of Object.entries(this.effects)) {
+      e.time -= dt;
+      if (e.time <= 0) delete this.effects[name];
+    }
+
+    const regen = this.effect('regen');
+    if (regen) this.heal(regen * dt);
+
+    if (invulnerable || this.flying) {
+      this.fallFrom = null;
+      return;
+    }
+
+    // Fall damage: measured from wherever the fall began, forgiving three blocks.
+    if (this.onGround || this.inLiquid) {
+      if (this.fallFrom !== null) {
+        const drop = this.y - this.fallFrom;
+        if (drop > 3 && !this.inLiquid) this.hurt(Math.floor(drop - 3), null, true);
+        this.fallFrom = null;
+      }
+    } else if (this.vy > 0) {
+      if (this.fallFrom === null) this.fallFrom = this.y;
+    } else {
+      this.fallFrom = null;
+    }
+
+    // Lava burns on a tick, unless fire resistance is up.
+    const inLava = [...this.occupied()].includes(LAVA);
+    if (inLava && !this.effect('fireResist')) {
+      this.lavaBurn -= dt;
+      if (this.lavaBurn <= 0) {
+        this.lavaBurn = 0.5;
+        this.hurt(4, null, true);
+      }
+    } else {
+      this.lavaBurn = 0;
+    }
   }
 
   /** Move to a new realm's world without losing momentum bookkeeping. */
@@ -58,7 +158,8 @@ export class Player {
       const drop = friction * dt * Math.abs(this.vx);
       this.vx -= Math.sign(this.vx) * Math.min(Math.abs(this.vx), drop + friction * dt * 0.5);
     }
-    const topSpeed = this.inLiquid ? SWIM_SPEED : MOVE_SPEED;
+    const boost = this.effect('speed') ?? 1;
+    const topSpeed = (this.inLiquid ? SWIM_SPEED : MOVE_SPEED) * boost;
     this.vx = Math.max(-topSpeed, Math.min(topSpeed, this.vx));
 
     // --- jump, with coyote time + input buffering so it feels forgiving ---

@@ -1,4 +1,5 @@
 import { BLOCKS, AIR, block } from './blocks.js';
+import { ITEMS } from './items.js';
 
 // Blocks are drawn from small offscreen canvases baked once at load, so the
 // pixel-art look costs no image assets. One painter per `style` in blocks.js.
@@ -273,17 +274,89 @@ const PAINTERS = {
   },
 };
 
+// Item icons are drawn the same way as blocks, keyed into the same table, so
+// the hotbar and palette don't care whether a slot holds a block or an item.
+const ITEM_PAINTERS = {
+  sword: (g, base) => {
+    g.strokeStyle = '#3a2c1e';
+    g.lineWidth = 2;
+    g.beginPath(); g.moveTo(4, 12); g.lineTo(7, 9); g.stroke();      // hilt
+    g.fillStyle = '#6b4c2b';
+    g.fillRect(3, 11, 3, 3);
+    g.fillStyle = '#8a6a3a';
+    g.fillRect(5, 8, 5, 2);                                          // guard
+    g.fillStyle = css(base);
+    g.beginPath();
+    g.moveTo(7, 9); g.lineTo(13, 3); g.lineTo(14, 4); g.lineTo(8, 10);
+    g.closePath(); g.fill();
+    g.fillStyle = css(shade(base, 1.4), 0.9);
+    g.fillRect(12, 3, 2, 2);
+  },
+
+  bow: (g, base) => {
+    g.strokeStyle = css(base);
+    g.lineWidth = 2;
+    g.beginPath();
+    g.arc(6, 8, 6, -Math.PI / 2.2, Math.PI / 2.2);                   // limb
+    g.stroke();
+    g.strokeStyle = '#e8e4dc';
+    g.lineWidth = 1;
+    g.beginPath(); g.moveTo(3, 2); g.lineTo(3, 14); g.stroke();      // string
+    g.strokeStyle = '#c9c4bc';
+    g.beginPath(); g.moveTo(3, 8); g.lineTo(13, 8); g.stroke();      // nocked arrow
+  },
+
+  arrow: (g, base) => {
+    g.strokeStyle = '#6b4c2b';
+    g.lineWidth = 1;
+    g.beginPath(); g.moveTo(3, 13); g.lineTo(12, 4); g.stroke();
+    g.fillStyle = css(base);
+    g.beginPath();
+    g.moveTo(13, 3); g.lineTo(13, 7); g.lineTo(9, 5);
+    g.closePath(); g.fill();
+    g.fillStyle = '#e8e4dc';
+    g.fillRect(2, 12, 3, 1);
+    g.fillRect(3, 13, 1, 2);
+  },
+
+  potion: (g, base) => {
+    g.fillStyle = '#c8c4bc';
+    g.fillRect(7, 2, 2, 3);                                          // neck
+    g.fillStyle = 'rgba(210,215,225,0.55)';
+    g.beginPath(); g.arc(8, 10, 5, 0, Math.PI * 2); g.fill();        // glass
+    g.fillStyle = css(base);
+    g.beginPath(); g.arc(8, 11, 4, 0, Math.PI * 2); g.fill();        // contents
+    g.fillStyle = css(shade(base, 1.5), 0.8);
+    g.fillRect(6, 8, 2, 1);
+  },
+
+  material: (g, base, d) => {
+    grain(g, base, d.id, 0.3);
+    g.fillStyle = 'rgba(0,0,0,0.35)';
+    g.fillRect(0, 0, RES, 3);
+    g.fillRect(0, RES - 3, RES, 3);
+    g.fillRect(0, 0, 3, RES);
+    g.fillRect(RES - 3, 0, 3, RES);
+  },
+};
+
 export const textures = {};
+
+function bakeInto(id, painter, tint, def) {
+  const c = document.createElement('canvas');
+  c.width = c.height = RES;
+  const g = c.getContext('2d');
+  painter(g, hexToRgb(tint), def);
+  textures[id] = c;
+}
 
 export function bakeAll() {
   for (const d of Object.values(BLOCKS)) {
     if (d.id === AIR || d.style === 'none' || !d.tint) continue;
-
-    const c = document.createElement('canvas');
-    c.width = c.height = RES;
-    const g = c.getContext('2d');
-    (PAINTERS[d.style] ?? PAINTERS.plain)(g, hexToRgb(d.tint), d);
-    textures[d.id] = c;
+    bakeInto(d.id, PAINTERS[d.style] ?? PAINTERS.plain, d.tint, d);
+  }
+  for (const d of Object.values(ITEMS)) {
+    bakeInto(d.id, ITEM_PAINTERS[d.icon] ?? ITEM_PAINTERS.material, d.tint, d);
   }
 }
 

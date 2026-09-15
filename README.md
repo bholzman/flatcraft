@@ -6,14 +6,15 @@ no build step and no dependencies.
 ## Running
 
 ES modules need to be served over HTTP (opening `index.html` directly will fail
-on CORS). Any static server works:
+on CORS). Use the bundled dev server:
 
 ```sh
-npx serve .          # or:
-python3 -m http.server 8080
+./serve.py           # http://localhost:8137
 ```
 
-Then open http://localhost:8080.
+It sends `Cache-Control: no-store`, which matters while iterating: plain
+`python3 -m http.server` sends no cache headers at all, and Chrome will then
+keep running a stale copy of an edited module until you hard-reload.
 
 ## Controls
 
@@ -24,7 +25,49 @@ Then open http://localhost:8080.
 | Left click | Mine the highlighted block |
 | Right click | Place the selected block |
 | `1`–`9` / scroll | Select hotbar slot |
+| Left click | Mine, or **attack** the mob under the cursor |
+| Right click | Place, **draw the bow**, or **drink/throw a potion** |
+| `I` | Backpack |
+| `G` | Cycle survival → creative → spectator |
+| `B` | Travel to any biome (creative / spectator) |
+| `E` | Block palette (creative) |
 | `F3` | Debug overlay |
+
+Stand in a portal for a moment to change realm.
+
+## Modes
+
+| Mode | Movement | World |
+| --- | --- | --- |
+| Survival | Walk, jump, swim | Mine and place, blocks cost inventory |
+| Creative | Fly | Instant mining, infinite blocks, longer reach |
+| Spectator | Fly through blocks | Look only — no mining, placing or targeting |
+
+Only survival takes damage; creative and spectator are invulnerable.
+
+## Mobs and combat
+
+44 mobs spawn into the biomes they belong in — pigs and bees in the plains,
+husks and rabbits in the desert, dolphins and drowned in the ocean, frogs and
+witches in the swamp, axolotls and glow squid in the lush caves, wardens in the
+deep dark, piglins and ghasts in the Nether, endermen and shulkers in the End.
+
+- **Passive** (15) wander, and flee when hit.
+- **Neutral** (10) ignore you until provoked, then fight back.
+- **Hostile** (19) hunt you on sight, and some shoot: skeletons fire arrows,
+  ghasts and blazes fire fireballs, witches throw splash potions.
+
+Spawning follows the player's depth, so digging down changes what you meet
+rather than filling the surface far above you.
+
+Combat: six sword tiers (4–8 damage, 1 bare-handed), a bow that charges while
+you hold right click, and six potions — healing, regeneration, strength,
+swiftness, fire resistance, and a thrown splash potion of harming. Projectiles
+solve their own launch angle, so a shot aimed at a mob connects rather than
+dropping at its feet. Fall damage and lava both hurt; dying respawns you in the
+Overworld.
+
+Mob drops go to the hotbar, overflowing into an 18-slot backpack (`I`).
 
 ## Layout
 
@@ -57,7 +100,17 @@ js/
 - **Rendering** only touches tiles inside the camera view, so world size doesn't
   affect frame cost.
 
+## Layout additions
+
+```
+js/items.js      swords, bow, arrows, potions, mob drops (ids >= 256)
+js/mobs.js       mob registry: stats, biomes, behaviour, palettes
+js/entities.js   mob AI, projectiles, ballistics, spawning
+js/physics.js    shared AABB sweep used by the player and every mob
+```
+
 ## Not built yet
 
-Crafting, tools/tool tiers, mobs, health/hunger, day–night, world save/load,
-chunked streaming, sound.
+Crafting, tool tiers, hunger, a day–night cycle (hostile spawns currently key
+off depth instead of light level), world save/load, chunked streaming, sound,
+breeding/taming, boss mechanics for the Ender Dragon.

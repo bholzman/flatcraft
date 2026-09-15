@@ -10,6 +10,8 @@ import { Inventory } from './inventory.js';
 import { HUD } from './hud.js';
 import { bakeAll } from './textures.js';
 import { BIOMES } from './biomes.js';
+import { Entities, Projectile, ballisticVelocity } from './entities.js';
+import * as I from './items.js';
 
 const PORTAL_IDS = new Set([NETHER_PORTAL, END_PORTAL]);
 
@@ -35,14 +37,20 @@ class Game {
     this.inventory = new Inventory();
     this.inventory.giveStarter();
     this.mode = 'survival';
+    this.entities = new Entities();
     this.hud = new HUD(this);
 
     this.mining = null;          // { x, y, id, progress }
     this.hover = null;           // block cell under the cursor, if in reach
+    this.target = null;          // mob under the cursor, if in reach
     this.intent = { move: 0, down: false, jumpHeld: false, jumpPressed: false };
     this.placeCooldown = 0;
     this.portalDwell = 0;
     this.travelLock = false;     // stops the arrival portal re-triggering
+    this.bowDraw = 0;            // seconds the bow has been held
+    this.attackCooldown = 0;
+    this.useCooldown = 0;
+    this.respawnTimer = 0;
     this.running = false;
     this.accumulator = 0;
     this.lastTime = 0;
@@ -67,6 +75,7 @@ class Game {
   start() {
     if (this.running) return;
     this.running = true;
+    this.entities.populate(this.entityContext());
     this.lastTime = performance.now();
     requestAnimationFrame(this.frame);
   }
@@ -88,6 +97,8 @@ class Game {
 
     this.renderer.follow(this.player, dt);
     this.renderer.draw(this);
+    this.hud.renderHealth(this.player, this.mode === 'survival');
+    this.hud.renderEffects(this.player);
     this.renderDebug();
 
     this.input.endFrame();
@@ -98,7 +109,39 @@ class Game {
     this.player.update(dt, this.intent);
     this.intent.jumpPressed = false;      // a buffered jump only fires once
     this.placeCooldown = Math.max(0, this.placeCooldown - dt);
+    this.attackCooldown = Math.max(0, this.attackCooldown - dt);
+    this.useCooldown = Math.max(0, this.useCooldown - dt);
+
+    this.player.updateVitals(dt, !this.vulnerable);
+    this.entities.enabled = this.mode !== 'spectator';
+    this.entities.update(dt, this.entityContext());
+
+    if (this.player.dead) {
+      this.respawnTimer -= dt;
+      if (this.respawnTimer <= 0) this.respawnPlayer();
+    }
+
     this.updatePortals(dt);
+  }
+
+  /** Spectators and creative players can't be hurt. */
+  get vulnerable() {
+    return this.mode === 'survival' && !this.player.dead;
+  }
+
+  entityContext() {
+    return {
+      world: this.world,
+      player: this.player,
+      mobs: this.entities.mobs,
+      playerVulnerable: this.vulnerable,
+      damagePlayer: (amount, fromX) => {
+        if (!this.vulnerable) return;
+        if (this.player.hurt(amount, fromX) && this.player.dead) this.onPlayerDeath();
+      },
+      killOrHurt: (mob, amount, fromX) => this.hitMob(mob, amount, fromX),
+      fire: (mob, target) => this.mobFire(mob, target),
+    };
   }
 
   handleInput(dt) {
@@ -110,9 +153,11 @@ class Game {
     // only useful to someone who can actually place a block.
     if (this.mode !== 'survival' && input.consumePress('KeyB')) this.hud.toggleBiomes();
     if (this.creative && input.consumePress('KeyE')) this.hud.togglePalette();
+    if (input.consumePress('KeyI')) this.hud.togglePack();
     if (input.consumePress('Escape')) {
       this.hud.toggleBiomes(false);
       this.hud.togglePalette(false);
+      this.hud.togglePack(false);
     }
 
     // While a creative panel is open the world shouldn't react to input.
@@ -122,6 +167,8 @@ class Game {
       this.intent.jumpHeld = false;
       this.hover = null;
       this.mining = null;
+      this.target = null;
+      this.bowDraw = 0;
       return;
     }
 
@@ -142,8 +189,38 @@ class Game {
     if (wheel) this.inventory.scroll(wheel);
 
     this.updateHover();
+    this.updateCombat(dt);
     this.updateMining(dt);
     this.updatePlacing();
+  }
+
+  /** Left click hits a mob if one is under the cursor; otherwise it mines. */
+  updateCombat(dt) {
+    if (!this.canInteract) {
+      this.target = null;
+      this.bowDraw = 0;
+      return;
+    }
+
+    this.target = this.mobUnderCursor();
+    if (this.input.mouse.left && this.target) {
+      this.attack(this.target);
+      this.mining = null;
+    }
+
+    const held = this.inventory.held;
+    const it = held.count > 0 ? I.item(held.id) : null;
+
+    // Holding a bow or a potion replaces block placement on the right button.
+    if (it?.kind === 'bow') {
+      if (this.input.mouse.right) this.bowDraw += dt;
+      else if (this.bowDraw > 0) this.fireArrow();
+    } else {
+      this.bowDraw = 0;
+      if (it?.kind === 'potion' && this.input.mouse.right && this.useCooldown <= 0) {
+        this.drinkPotion(held.id);
+      }
+    }
   }
 
   // ---- creative ----
@@ -160,6 +237,7 @@ class Game {
 
     if (mode === 'survival') this.hud.toggleBiomes(false);
     if (mode !== 'creative') this.hud.togglePalette(false);
+    if (mode === 'spectator') this.hud.togglePack(false);
 
     // Leaving spectator inside solid rock would trap the player.
     if (mode !== 'spectator' && this.player.collides()) {
@@ -179,6 +257,7 @@ class Game {
    * look for an existing opening near the centre of the world.
    */
   jumpToBiome(realm, biomeId) {
+    const prevRealm = this.realm;
     const world = this.getWorld(realm);
     if (realm !== this.realm) {
       this.realm = realm;
@@ -197,8 +276,12 @@ class Game {
       at = world.viewpointAt(band ? band.mid : Math.floor(world.width / 2));
     }
 
+    // Teleporting across the world leaves every existing mob irrelevant, and
+    // keeping them would use up the population cap before the new biome fills.
+    this.entities.clear();
     this.player.enter(world, at);
     this.renderer.snapTo(this.player);
+    this.entities.populate(this.entityContext());
     this.travelLock = true;
     this.mining = null;
     this.hud.announce(bi?.name ?? biomeId);
@@ -262,12 +345,128 @@ class Game {
       ? { x: portal.x, y: portal.y - 1 }
       : world.spawnPoint(world.spawnX);
 
+    this.entities.onRealmChange();
     this.player.enter(world, at);
     this.renderer.snapTo(this.player);
+    this.entities.populate(this.entityContext());
     this.portalDwell = 0;
     this.travelLock = true;
     this.mining = null;
     this.hud.announce(`Entered ${realm === 'end' ? 'The End' : realm[0].toUpperCase() + realm.slice(1)}`);
+  }
+
+  // ---- combat ----
+
+  /** The mob under the cursor, if any is in reach. */
+  mobUnderCursor() {
+    const m = this.input.mouse;
+    const w = this.renderer.screenToWorld(m.x, m.y);
+    const reach = this.creative ? CREATIVE_REACH : REACH;
+
+    let best = null;
+    let bestDist = Infinity;
+    for (const mob of this.entities.mobs) {
+      if (mob.dead) continue;
+      if (w.x < mob.left || w.x > mob.right || w.y < mob.top || w.y > mob.bottom) continue;
+      const d = Math.hypot(mob.x - this.player.x, mob.centerY - this.player.centerY);
+      if (d <= reach && d < bestDist) { best = mob; bestDist = d; }
+    }
+    return best;
+  }
+
+  /** Damage dealt by the held item, plus any strength effect. */
+  get attackDamage() {
+    const held = this.inventory.held;
+    const it = I.item(held.count > 0 ? held.id : -1);
+    const base = it?.kind === 'sword' ? it.damage : 1;
+    return base + (this.player.effect('strength') ?? 0);
+  }
+
+  hitMob(mob, amount, fromX) {
+    mob.hurt(amount, fromX);
+    if (!mob.dead) return;
+    // Drops go straight to the inventory; there are no ground items yet.
+    for (const d of mob.rollDrops()) this.inventory.add(d.id, d.count);
+  }
+
+  attack(mob) {
+    if (this.attackCooldown > 0) return;
+    this.attackCooldown = 0.45;
+    this.hitMob(mob, this.attackDamage, this.player.x);
+  }
+
+  mobFire(mob, target) {
+    const r = mob.def.ranged;
+    const gravity = r.kind === 'fireball' ? 0 : (r.kind === 'potion' ? 22 : 16);
+    const { vx, vy } = ballisticVelocity(
+      target.x - mob.x, target.centerY - mob.centerY, r.speed, gravity);
+
+    this.entities.projectiles.push(
+      new Projectile(r.kind, this.world, mob.x, mob.centerY, vx, vy, { damage: r.damage }));
+  }
+
+  /** Release a drawn bow toward the cursor. */
+  fireArrow() {
+    const power = Math.min(1, this.bowDraw / (I.item(I.BOW).drawTime));
+    this.bowDraw = 0;
+    if (power < 0.25) return;
+    if (!this.creative && !this.inventory.remove(I.ARROW, 1)) return;
+
+    const m = this.input.mouse;
+    const w = this.renderer.screenToWorld(m.x, m.y);
+    const speed = 16 + power * 24;
+    const { vx, vy } = ballisticVelocity(
+      w.x - this.player.x, w.y - this.player.centerY, speed, 16);
+
+    this.entities.projectiles.push(new Projectile(
+      'arrow', this.world, this.player.x, this.player.centerY, vx, vy,
+      { damage: Math.max(1, Math.round(I.item(I.BOW).damage * power)), fromPlayer: true }));
+  }
+
+  drinkPotion(id) {
+    const it = I.item(id);
+    if (!it || it.kind !== 'potion') return;
+
+    if (it.splash) {
+      // Splash potions get thrown at the cursor rather than drunk.
+      const m = this.input.mouse;
+      const w = this.renderer.screenToWorld(m.x, m.y);
+      const dx = w.x - this.player.x;
+      const dy = w.y - this.player.centerY;
+      const { vx, vy } = ballisticVelocity(dx, dy, 15, 22);
+      this.entities.projectiles.push(new Projectile(
+        'potion', this.world, this.player.x, this.player.centerY, vx, vy,
+        { damage: it.effect.damage ?? 6, fromPlayer: true }));
+    } else {
+      const e = it.effect;
+      if (e.heal) this.player.heal(e.heal);
+      if (e.regen) this.player.applyEffect('regen', e.regen, e.duration);
+      if (e.strength) this.player.applyEffect('strength', e.strength, e.duration);
+      if (e.speed) this.player.applyEffect('speed', e.speed, e.duration);
+      if (e.fireResist) this.player.applyEffect('fireResist', true, e.duration);
+    }
+
+    if (!this.creative) this.inventory.remove(id, 1);
+    this.useCooldown = 0.6;
+    this.hud.announce(it.name);
+  }
+
+  onPlayerDeath() {
+    this.respawnTimer = 2.2;
+    this.entities.projectiles.length = 0;
+    this.hud.announce('You died');
+  }
+
+  respawnPlayer() {
+    if (this.realm !== START_REALM) {
+      this.realm = START_REALM;
+      this.world = this.getWorld(START_REALM);
+      this.entities.onRealmChange();
+    }
+    this.player.respawn(this.world, this.world.spawnPoint(this.world.spawnX));
+    this.renderer.snapTo(this.player);
+    this.travelLock = true;
+    this.hud.announce('Respawned');
   }
 
   // ---- interaction ----
@@ -293,6 +492,7 @@ class Game {
   updateMining(dt) {
     const target = this.hover;
 
+    if (this.target) { this.mining = null; return; }
     if (!this.input.mouse.left || !target) {
       this.mining = null;
       return;
@@ -321,6 +521,10 @@ class Game {
   updatePlacing() {
     if (!this.canInteract) return;
     if (!this.input.mouse.right || !this.hover || this.placeCooldown > 0) return;
+
+    // Swords, bows and potions are used, not placed.
+    const held = this.inventory.held;
+    if (held.count > 0 && I.isItem(held.id)) return;
 
     const { x, y } = this.hover;
     if (!this.world.isReplaceable(x, y)) return;
@@ -354,6 +558,9 @@ class Game {
       `depth    ${(p.y - this.world.ground[Math.max(0, Math.min(this.world.width - 1, p.x | 0))]).toFixed(0)}`,
       `ground   ${p.onGround}${p.inLiquid ? ' (in liquid)' : ''}`,
       `hover    ${this.hover ? `${this.hover.x},${this.hover.y} ${block(hoverId).name}` : '-'}`,
+      `health   ${this.player.health.toFixed(0)}/${this.player.maxHealth}`,
+      `mobs     ${this.entities.mobs.length}  proj ${this.entities.projectiles.length}`,
+      `target   ${this.target ? this.target.def.name : '-'}`,
       `holding  ${this.inventory.describeSelected()}`,
       `seed     ${this.seed}`,
     ]);

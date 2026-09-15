@@ -71,6 +71,43 @@ html, body {
   opacity: 1;
 }
 
+#health {
+  position: absolute;
+  left: 50%;
+  bottom: 76px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 2px;
+  font-size: 19px;
+  line-height: 1;
+  text-shadow: 0 1px 2px #000, 0 0 3px #000;
+}
+
+#health.hidden { display: none; }
+
+.heart.full  { color: #e03a3a; }
+.heart.half  { color: #e03a3a; opacity: 0.55; }
+.heart.empty { color: #2a2a30; }
+
+#effects {
+  position: absolute;
+  left: 50%;
+  bottom: 104px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 5px;
+}
+
+.effect {
+  padding: 2px 7px;
+  background: var(--ui-bg);
+  border-radius: 3px;
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #9fe0ff;
+}
+
 /* ---- Creative panels ---- */
 
 .panel-overlay {
@@ -167,6 +204,14 @@ html, body {
   background: #33333f;
   border-color: #55556a;
 }
+
+.pack-grid {
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  gap: 5px;
+}
+
+.pack-grid .slot { width: auto; }
 
 .grid {
   display: grid;
