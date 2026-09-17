@@ -28,6 +28,7 @@ keep running a stale copy of an edited module until you hard-reload.
 | Left click | Mine, or **attack** the mob under the cursor |
 | Right click | Place, **draw the bow**, or **drink/throw a potion** |
 | `I` | Backpack |
+| Hover | Tooltip naming the block, mob, or structure under the cursor |
 | `G` | Cycle survival → creative → spectator |
 | `B` | Travel to any biome (creative / spectator) |
 | `E` | Block palette (creative) |
@@ -100,6 +101,28 @@ js/
 - **Rendering** only touches tiles inside the camera view, so world size doesn't
   affect frame cost.
 
+## Structures
+
+18 structures generate into the biomes and realms they belong in, each drawn
+in cross-section:
+
+| Where | Structures |
+| --- | --- |
+| Surface | Village (oak/acacia/spruce/sandstone by biome), Desert Pyramid, Jungle Temple, Swamp Hut, Woodland Mansion, Pillager Outpost, Ruined Portal |
+| Water | Shipwreck, Ocean Monument, Buried Treasure |
+| Underground | Mineshaft, Dungeon, Amethyst Geode, Stronghold (with a library and an End portal room), Ancient City |
+| Nether | Nether Fortress, Bastion Remnant |
+| End | End City |
+
+Placement walks the world in cells so structures of a kind stay apart, and
+terrain under a surface structure is levelled the way Minecraft terraforms
+under a village — including the terrain baseline the renderer shades from.
+
+**Chests** roll a loot table the first time you right-click them (18 tables,
+one per structure) and keep whatever doesn't fit in your inventory.
+**Spawners** run only while you're within 22 blocks and cap the mobs they've
+made nearby, so a dungeon doesn't eat the whole population budget.
+
 ## Layout additions
 
 ```
@@ -107,10 +130,13 @@ js/items.js      swords, bow, arrows, potions, mob drops (ids >= 256)
 js/mobs.js       mob registry: stats, biomes, behaviour, palettes
 js/entities.js   mob AI, projectiles, ballistics, spawning
 js/physics.js    shared AABB sweep used by the player and every mob
+js/structures.js structure registry, cross-section builders, placement
+js/loot.js       per-structure chest loot tables
 ```
 
 ## Not built yet
 
 Crafting, tool tiers, hunger, a day–night cycle (hostile spawns currently key
 off depth instead of light level), world save/load, chunked streaming, sound,
-breeding/taming, boss mechanics for the Ender Dragon.
+breeding/taming. The Ender Dragon exists and fights, but has no boss mechanics
+— no perches, healing crystals, or end-of-fight sequence.

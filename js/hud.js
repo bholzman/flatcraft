@@ -1,4 +1,4 @@
-import { AIR, PLACEABLE } from './blocks.js';
+import { AIR, PLACEABLE, block, isLiquid, isDecoration } from './blocks.js';
 import * as I from './items.js';
 import { BIOMES, LAYOUTS } from './biomes.js';
 import { swatchDataURL } from './textures.js';
@@ -20,6 +20,7 @@ export class HUD {
     this.biomesEl = document.getElementById('biomes');
     this.paletteEl = document.getElementById('palette');
     this.packEl = document.getElementById('pack');
+    this.tipEl = document.getElementById('tooltip');
     this.toastTimer = null;
     this.showDebug = false;
     this.debugEl.classList.add('hidden');
@@ -226,6 +227,81 @@ export class HUD {
     this.effectsEl.innerHTML = names
       .map((n) => `<span class="effect">${n} ${player.effects[n].time.toFixed(0)}s</span>`)
       .join('');
+  }
+
+  // ---- hover tooltip ----
+
+  /**
+   * Names whatever is under the cursor: a mob, a block, and the structure it
+   * belongs to. Rebuilt only when the subject changes, since this runs every
+   * frame.
+   */
+  renderTooltip(info) {
+    if (!info || this.anyPanelOpen()) {
+      this.tipEl.classList.remove('show');
+      this.lastTip = null;
+      return;
+    }
+
+    const key = info.mob
+      ? `mob:${info.mob.eid}:${Math.ceil(info.mob.health)}`
+      : `blk:${info.blockId}:${info.bx},${info.by}:${info.structure?.id ?? ''}`;
+
+    if (key !== this.lastTip) {
+      this.lastTip = key;
+      this.tipEl.innerHTML = info.mob ? this.mobTip(info.mob) : this.blockTip(info);
+    }
+
+    // Sit beside the cursor, flipping near the edges so it stays on screen.
+    const pad = 16;
+    const w = this.tipEl.offsetWidth || 160;
+    const h = this.tipEl.offsetHeight || 48;
+    const flipX = info.screenX + pad + w > window.innerWidth;
+    const flipY = info.screenY + pad + h > window.innerHeight;
+    this.tipEl.style.left = `${info.screenX + (flipX ? -w - pad : pad)}px`;
+    this.tipEl.style.top = `${info.screenY + (flipY ? -h - pad : pad)}px`;
+    this.tipEl.classList.add('show');
+  }
+
+  mobTip(m) {
+    const d = m.def;
+    const bits = [
+      `<span class="tag ${d.behavior}">${d.behavior}</span>`,
+      `${Math.ceil(m.health)}/${m.maxHealth} HP`,
+    ];
+    if (d.damage) bits.push(`${d.damage} damage`);
+    if (d.ranged) bits.push('ranged');
+    if (d.flying) bits.push('flies');
+    if (d.aquatic) bits.push('aquatic');
+    if (d.boss) bits.push('boss');
+    return `<b>${d.name}</b><span class="sub">${bits.join(' &middot; ')}</span>`;
+  }
+
+  blockTip(info) {
+    const { blockId, structure } = info;
+    const def = block(blockId);
+
+    // Empty air only earns a tooltip when it's part of something built.
+    if (blockId === AIR) {
+      return structure ? `<b>${structure.name}</b><span class="sub">structure</span>` : '';
+    }
+
+    const bits = [];
+    bits.push(def.hardness === null ? 'unbreakable' : `${def.hardness}s to mine`);
+    if (def.drops !== undefined && def.drops !== blockId) bits.push(`drops ${block(def.drops).name}`);
+    if (isLiquid(blockId)) bits.push('liquid');
+    else if (isDecoration(blockId)) bits.push('walk-through');
+    if (def.emit >= 0.4) bits.push('light source');
+    if (def.climbable) bits.push('climbable');
+
+    const extra = info.data?.kind === 'chest'
+      ? `<span class="sub">${info.data.opened ? 'already looted' : 'unopened &mdash; right click'}</span>`
+      : info.data?.kind === 'spawner'
+        ? `<span class="sub">spawns ${info.data.mob.replace(/_/g, ' ')}</span>`
+        : '';
+
+    const where = structure ? `<span class="where">${structure.name}</span>` : '';
+    return `<b>${def.name}</b><span class="sub">${bits.join(' &middot; ')}</span>${extra}${where}`;
   }
 
   // ---- readouts ----

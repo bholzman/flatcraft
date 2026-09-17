@@ -264,6 +264,185 @@ const PAINTERS = {
     g.fillRect(2, RES - 5, RES - 4, 1);
   },
 
+  cracked: (g, base, d) => {
+    PAINTERS.bricks(g, base, d);
+    g.strokeStyle = css(shade(base, 0.45), 0.9);
+    g.lineWidth = 1;
+    for (let i = 0; i < 4; i++) {
+      const x = Math.floor(noiseAt(i, 40, d.id) * RES);
+      const y = Math.floor(noiseAt(i, 41, d.id) * RES);
+      g.beginPath();
+      g.moveTo(x, y);
+      g.lineTo(x + 3 - noiseAt(i, 42, d.id) * 6, y + 4);
+      g.stroke();
+    }
+  },
+
+  chiseled: (g, base, d) => {
+    grain(g, base, d.id, 0.12);
+    g.fillStyle = css(shade(base, 0.6), 0.9);
+    g.strokeRect(1.5, 1.5, RES - 3, RES - 3);
+    g.fillRect(1, 1, RES - 2, 1);
+    g.fillRect(1, RES - 2, RES - 2, 1);
+    g.fillStyle = css(shade(base, 0.72), 0.85);
+    g.fillRect(5, 4, 6, 8);                              // engraved face
+    g.fillStyle = css(shade(base, 1.2), 0.8);
+    g.fillRect(7, 6, 2, 4);
+  },
+
+  chest: (g, base, d) => {
+    grain(g, base, d.id, 0.16);
+    g.fillStyle = css(shade(base, 0.55), 0.95);
+    g.fillRect(0, 5, RES, 2);                            // lid seam
+    g.strokeStyle = css(shade(base, 0.4), 0.9);
+    g.lineWidth = 1;
+    g.strokeRect(0.5, 0.5, RES - 1, RES - 1);
+    g.fillStyle = '#d8bf5a';                             // latch
+    g.fillRect(RES / 2 - 2, 4, 4, 4);
+    g.fillStyle = '#4a3a1a';
+    g.fillRect(RES / 2 - 1, 5, 2, 2);
+  },
+
+  cage: (g, base, d) => {
+    grain(g, shade(base, 0.7), d.id, 0.12);
+    g.strokeStyle = css(shade(base, 1.6), 0.9);
+    g.lineWidth = 1;
+    for (let i = 2; i < RES; i += 4) {
+      g.beginPath(); g.moveTo(i, 0); g.lineTo(i, RES); g.stroke();
+      g.beginPath(); g.moveTo(0, i); g.lineTo(RES, i); g.stroke();
+    }
+    g.fillStyle = 'rgba(90,220,210,0.5)';                // something glowing inside
+    g.fillRect(6, 6, 4, 4);
+  },
+
+  crafting: (g, base, d) => {
+    PAINTERS.planks(g, base, d);
+    g.fillStyle = 'rgba(40,28,16,0.85)';
+    g.fillRect(2, 2, RES - 4, RES - 4);
+    g.fillStyle = css(shade(base, 1.25));
+    for (let i = 0; i < 4; i++) {
+      g.fillRect(3 + (i % 2) * 6, 3 + Math.floor(i / 2) * 6, 5, 5);
+    }
+  },
+
+  furnace: (g, base, d) => {
+    PAINTERS.cobble(g, base, d);
+    g.fillStyle = '#1e1e22';
+    g.fillRect(3, 7, RES - 6, 7);                        // mouth
+    g.fillStyle = '#e2611c';
+    g.fillRect(5, 10, RES - 10, 3);
+    g.fillStyle = '#f0c04a';
+    g.fillRect(6, 11, 3, 1);
+  },
+
+  bookshelf: (g, base, d) => {
+    PAINTERS.planks(g, base, d);
+    g.fillStyle = 'rgba(40,28,16,0.8)';
+    g.fillRect(0, 3, RES, 10);
+    const spines = ['#a83a32', '#3a6aa8', '#c9a834', '#4a8a3a', '#8a4aa8'];
+    for (let i = 0; i < 6; i++) {
+      g.fillStyle = spines[i % spines.length];
+      g.fillRect(1 + i * 2.5, 4, 2, 8);
+    }
+  },
+
+  web: (g, base) => {
+    g.strokeStyle = css(base, 0.75);
+    g.lineWidth = 1;
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI;
+      g.beginPath();
+      g.moveTo(RES / 2 - Math.cos(a) * 8, RES / 2 - Math.sin(a) * 8);
+      g.lineTo(RES / 2 + Math.cos(a) * 8, RES / 2 + Math.sin(a) * 8);
+      g.stroke();
+    }
+    for (const r of [3, 6]) {
+      g.beginPath();
+      g.arc(RES / 2, RES / 2, r, 0, Math.PI * 2);
+      g.stroke();
+    }
+  },
+
+  rail: (g, base) => {
+    g.fillStyle = '#6b4c2b';
+    for (let x = 1; x < RES; x += 4) g.fillRect(x, RES - 5, 3, 3);
+    g.fillStyle = css(base);
+    g.fillRect(0, RES - 6, RES, 1);
+    g.fillRect(0, RES - 2, RES, 1);
+  },
+
+  fence: (g, base) => {
+    g.fillStyle = css(base);
+    g.fillRect(RES / 2 - 2, 0, 4, RES);                  // post
+    g.fillStyle = css(shade(base, 0.8));
+    g.fillRect(0, 4, RES, 2);                            // rails
+    g.fillRect(0, 10, RES, 2);
+  },
+
+  ladder: (g, base) => {
+    g.fillStyle = css(base);
+    g.fillRect(2, 0, 2, RES);
+    g.fillRect(RES - 4, 0, 2, RES);
+    g.fillStyle = css(shade(base, 1.15));
+    for (let y = 2; y < RES; y += 5) g.fillRect(2, y, RES - 4, 2);
+  },
+
+  door: (g, base, d) => {
+    PAINTERS.planks(g, base, d);
+    g.fillStyle = 'rgba(0,0,0,0.35)';
+    g.fillRect(0, 0, 2, RES);
+    g.fillRect(RES - 2, 0, 2, RES);
+    g.fillStyle = '#d8bf5a';
+    g.fillRect(RES - 5, RES / 2 - 1, 2, 2);              // handle
+  },
+
+  crystal: (g, base, d) => {
+    grain(g, shade(base, 0.8), d.id, 0.2);
+    for (let i = 0; i < 5; i++) {
+      const x = 2 + Math.floor(noiseAt(i, 43, d.id) * (RES - 6));
+      const y = 2 + Math.floor(noiseAt(i, 44, d.id) * (RES - 8));
+      g.fillStyle = css(shade(base, 1.45), 0.9);
+      g.beginPath();
+      g.moveTo(x + 2, y);
+      g.lineTo(x + 4, y + 5);
+      g.lineTo(x, y + 5);
+      g.closePath(); g.fill();
+      g.fillStyle = css(shade(base, 1.9), 0.8);
+      g.fillRect(x + 2, y + 1, 1, 3);
+    }
+  },
+
+  tnt: (g, base, d) => {
+    grain(g, base, d.id, 0.14);
+    g.fillStyle = '#e8e4dc';
+    g.fillRect(0, 5, RES, 6);
+    g.fillStyle = '#2a2a2a';
+    g.font = 'bold 6px monospace';
+    g.fillText('TNT', 2, 10);
+  },
+
+  wool: (g, base, d) => {
+    grain(g, base, d.id, 0.16);
+    g.fillStyle = css(shade(base, 0.88), 0.5);
+    for (let i = 0; i < 22; i++) {
+      const x = Math.floor(noiseAt(i, 45, d.id) * RES);
+      const y = Math.floor(noiseAt(i, 46, d.id) * RES);
+      g.fillRect(x, y, 2, 1);
+    }
+  },
+
+  lantern: (g, base) => {
+    g.fillStyle = '#4a4a52';
+    g.fillRect(RES / 2 - 1, 0, 2, 3);                    // chain
+    g.fillRect(RES / 2 - 4, 3, 8, 2);
+    g.fillStyle = css(base);
+    g.fillRect(RES / 2 - 3, 5, 6, 6);
+    g.fillStyle = css(shade(base, 1.5));
+    g.fillRect(RES / 2 - 2, 6, 4, 4);
+    g.fillStyle = '#4a4a52';
+    g.fillRect(RES / 2 - 4, 11, 8, 2);
+  },
+
   torch: (g, base) => {
     g.fillStyle = '#6b4c2b';
     g.fillRect(RES / 2 - 1, RES - 9, 2, 9);

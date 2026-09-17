@@ -134,6 +134,56 @@ export const NETHER_PORTAL = 93;
 export const END_PORTAL = 94;
 export const TORCH = 95;
 
+// --- structure materials ---
+export const CHEST = 96;
+export const SPAWNER = 97;
+export const CRAFTING_TABLE = 98;
+export const FURNACE = 99;
+export const BOOKSHELF = 100;
+export const MOSSY_COBBLESTONE = 101;
+export const STONE_BRICKS = 102;
+export const MOSSY_STONE_BRICKS = 103;
+export const CRACKED_STONE_BRICKS = 104;
+export const CHISELED_STONE_BRICKS = 105;
+export const COBWEB = 106;
+export const RAIL = 107;
+export const OAK_FENCE = 108;
+export const LADDER = 109;
+export const OAK_DOOR = 110;
+export const PRISMARINE = 111;
+export const DARK_PRISMARINE = 112;
+export const SEA_LANTERN = 113;
+export const CRYING_OBSIDIAN = 114;
+export const AMETHYST_BLOCK = 115;
+export const BUDDING_AMETHYST = 116;
+export const CALCITE = 117;
+export const SMOOTH_BASALT = 118;
+export const HAY_BALE = 119;
+export const FARMLAND = 120;
+export const WHEAT = 121;
+export const BRICKS = 122;
+export const CHISELED_SANDSTONE = 123;
+export const TNT = 124;
+export const PURPUR_PILLAR = 125;
+export const END_ROD = 126;
+export const SCULK_SHRIEKER = 127;
+export const POLISHED_BLACKSTONE = 128;
+export const GILDED_BLACKSTONE = 129;
+export const NETHER_BRICK_FENCE = 130;
+export const SPRUCE_PLANKS = 131;
+export const BIRCH_PLANKS = 132;
+export const DARK_OAK_PLANKS = 133;
+export const JUNGLE_PLANKS = 134;
+export const ACACIA_PLANKS = 135;
+export const WHITE_WOOL = 136;
+export const RED_WOOL = 137;
+export const LANTERN = 138;
+export const BARREL = 139;
+export const DEEPSLATE_BRICKS = 140;
+export const DEEPSLATE_TILES = 141;
+export const SOUL_LANTERN = 142;
+export const CHISELED_RED_SANDSTONE = 143;
+
 const R = {};   // id -> definition
 
 function def(id, name, opts = {}) {
@@ -259,6 +309,56 @@ def(CHORUS_FLOWER, 'Chorus Flower', { hardness: 0.6, tint: '#d4c9de', style: 'fl
 def(NETHER_PORTAL, 'Nether Portal', { solid: false, hardness: null, tint: '#8a3ad4', style: 'portal', emit: 0.7 });
 def(END_PORTAL, 'End Portal', { solid: false, hardness: null, tint: '#1b2a5a', style: 'portal', emit: 0.6 });
 def(TORCH, 'Torch', { solid: false, hardness: 0.05, tint: '#f2c44a', style: 'torch', emit: 1 });
+
+// --- structure materials ---
+def(CHEST, 'Chest', { hardness: 1.2, tint: '#9c7440', style: 'chest' });
+def(SPAWNER, 'Monster Spawner', { hardness: 4.0, tint: '#2a2e36', style: 'cage', emit: 0.25 });
+def(CRAFTING_TABLE, 'Crafting Table', { hardness: 1.0, tint: '#9a6b3a', style: 'crafting' });
+def(FURNACE, 'Furnace', { hardness: 1.8, tint: '#6e6e75', style: 'furnace' });
+def(BOOKSHELF, 'Bookshelf', { hardness: 1.0, tint: '#9a6b3a', style: 'bookshelf' });
+def(MOSSY_COBBLESTONE, 'Mossy Cobblestone', { hardness: 1.7, tint: '#5f7250', style: 'cobble' });
+def(STONE_BRICKS, 'Stone Bricks', { hardness: 1.6, tint: '#7a7a80', style: 'bricks' });
+def(MOSSY_STONE_BRICKS, 'Mossy Stone Bricks', { hardness: 1.6, tint: '#67785c', style: 'bricks' });
+def(CRACKED_STONE_BRICKS, 'Cracked Stone Bricks', { hardness: 1.6, tint: '#70706f', style: 'cracked' });
+def(CHISELED_STONE_BRICKS, 'Chiseled Stone Bricks', { hardness: 1.6, tint: '#80808a', style: 'chiseled' });
+def(COBWEB, 'Cobweb', { solid: false, hardness: 1.4, tint: '#e0e4ea', style: 'web' });
+def(RAIL, 'Rail', { solid: false, hardness: 0.3, tint: '#8a8a92', style: 'rail' });
+def(OAK_FENCE, 'Oak Fence', { solid: false, hardness: 0.9, tint: '#a97b46', style: 'fence' });
+def(LADDER, 'Ladder', { solid: false, hardness: 0.4, tint: '#9c7440', style: 'ladder', climbable: true });
+def(OAK_DOOR, 'Oak Door', { solid: false, hardness: 0.9, tint: '#a97b46', style: 'door' });
+def(PRISMARINE, 'Prismarine', { hardness: 1.5, tint: '#5a9a8e', style: 'moss' });
+def(DARK_PRISMARINE, 'Dark Prismarine', { hardness: 1.5, tint: '#2e5449', style: 'layered' });
+def(SEA_LANTERN, 'Sea Lantern', { hardness: 0.5, tint: '#a8e4d8', style: 'glow', emit: 0.9 });
+def(CRYING_OBSIDIAN, 'Crying Obsidian', { hardness: 6.0, tint: '#2a1250', style: 'glow', emit: 0.45 });
+def(AMETHYST_BLOCK, 'Amethyst Block', { hardness: 1.2, tint: '#8a5cc4', style: 'crystal', emit: 0.2 });
+def(BUDDING_AMETHYST, 'Budding Amethyst', { hardness: 1.4, tint: '#7a4cb4', style: 'crystal', emit: 0.35 });
+def(CALCITE, 'Calcite', { hardness: 1.2, tint: '#dcdcd4', style: 'plain' });
+def(SMOOTH_BASALT, 'Smooth Basalt', { hardness: 1.5, tint: '#3a3a42', style: 'layered' });
+def(HAY_BALE, 'Hay Bale', { hardness: 0.5, tint: '#c9a834', style: 'log' });
+def(FARMLAND, 'Farmland', { hardness: 0.5, tint: '#6a4a30', style: 'layered' });
+def(WHEAT, 'Wheat', { solid: false, hardness: 0.05, tint: '#cbb03a', style: 'plant' });
+def(BRICKS, 'Bricks', { hardness: 1.8, tint: '#96584a', style: 'bricks' });
+def(CHISELED_SANDSTONE, 'Chiseled Sandstone', { hardness: 0.9, tint: '#cfc08a', style: 'chiseled' });
+def(CHISELED_RED_SANDSTONE, 'Chiseled Red Sandstone', { hardness: 0.9, tint: '#a85a28', style: 'chiseled' });
+def(TNT, 'TNT', { hardness: 0.1, tint: '#c4342a', style: 'tnt' });
+def(PURPUR_PILLAR, 'Purpur Pillar', { hardness: 1.5, tint: '#aa72a9', style: 'log' });
+def(END_ROD, 'End Rod', { solid: false, hardness: 0.2, tint: '#f2eede', style: 'torch', emit: 0.85 });
+def(SCULK_SHRIEKER, 'Sculk Shrieker', { hardness: 2.0, tint: '#2a3a3e', style: 'cage', emit: 0.4 });
+def(POLISHED_BLACKSTONE, 'Polished Blackstone', { hardness: 1.7, tint: '#332d38', style: 'layered' });
+def(GILDED_BLACKSTONE, 'Gilded Blackstone', { hardness: 1.8, tint: '#2c262f', style: 'ore', speckle: '#e9c34a' });
+def(NETHER_BRICK_FENCE, 'Nether Brick Fence', { solid: false, hardness: 1.8, tint: '#3a1d21', style: 'fence' });
+def(SPRUCE_PLANKS, 'Spruce Planks', { hardness: 0.9, tint: '#7a5a38', style: 'planks' });
+def(BIRCH_PLANKS, 'Birch Planks', { hardness: 0.9, tint: '#d4c48e', style: 'planks' });
+def(DARK_OAK_PLANKS, 'Dark Oak Planks', { hardness: 0.9, tint: '#4a3420', style: 'planks' });
+def(JUNGLE_PLANKS, 'Jungle Planks', { hardness: 0.9, tint: '#a9805a', style: 'planks' });
+def(ACACIA_PLANKS, 'Acacia Planks', { hardness: 0.9, tint: '#b06a3a', style: 'planks' });
+def(WHITE_WOOL, 'White Wool', { hardness: 0.4, tint: '#e8e8ea', style: 'wool' });
+def(RED_WOOL, 'Red Wool', { hardness: 0.4, tint: '#a83a32', style: 'wool' });
+def(LANTERN, 'Lantern', { solid: false, hardness: 0.5, tint: '#e8c43a', style: 'lantern', emit: 0.95 });
+def(SOUL_LANTERN, 'Soul Lantern', { solid: false, hardness: 0.5, tint: '#4ad8e0', style: 'lantern', emit: 0.8 });
+def(BARREL, 'Barrel', { hardness: 1.0, tint: '#8a6a40', style: 'log' });
+def(DEEPSLATE_BRICKS, 'Deepslate Bricks', { hardness: 2.4, tint: '#44444c', style: 'bricks' });
+def(DEEPSLATE_TILES, 'Deepslate Tiles', { hardness: 2.4, tint: '#35353d', style: 'layered' });
 
 export const BLOCKS = R;
 

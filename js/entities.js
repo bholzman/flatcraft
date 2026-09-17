@@ -1,5 +1,5 @@
 import { GRAVITY, MAX_FALL_SPEED, LUSH_CAVES_AT, DEEP_DARK_AT } from './config.js';
-import { AIR, isSolid, isLiquid } from './blocks.js';
+import { AIR, SPAWNER, isSolid, isLiquid } from './blocks.js';
 import { MOBS, candidatesFor } from './mobs.js';
 import { sweep, collides, lineOfSight } from './physics.js';
 
@@ -8,6 +8,10 @@ const SPAWN_MAX = 46;
 const DESPAWN_AT = 110;
 const MAX_MOBS = 34;
 const SPAWN_INTERVAL = 1.4;  // seconds between spawn attempts
+const SPAWNER_RANGE = 22;    // blocks: how close before a structure spawner runs
+const SPAWNER_INTERVAL = 4;  // seconds between spawner activations
+const SPAWNER_RETRY = 0.8;   // shorter wait when there was nowhere to put it
+const SPAWN_OFFSETS = [1, -1, 2, -2, 3, -3, 0];
 
 let nextId = 1;
 
@@ -379,10 +383,57 @@ export class Entities {
     this.projectiles = this.projectiles.filter((p) => !p.dead);
 
     if (!this.enabled) return;
+
     this.spawnTimer -= dt;
     if (this.spawnTimer <= 0) {
       this.spawnTimer = SPAWN_INTERVAL;
       this.trySpawn(ctx);
+    }
+    this.runSpawners(dt, ctx);
+  }
+
+  /**
+   * Structure spawners tick only while the player is nearby, and keep a small
+   * local cap so a dungeon doesn't empty the global mob budget on its own.
+   */
+  runSpawners(dt, ctx) {
+    const { world, player } = ctx;
+    if (this.mobs.length >= MAX_MOBS) return;
+
+    for (const [key, data] of world.blockData) {
+      if (data.kind !== 'spawner') continue;
+
+      const [sx, sy] = key.split(',').map(Number);
+      if (Math.abs(sx - player.x) > SPAWNER_RANGE
+          || Math.abs(sy - player.y) > SPAWNER_RANGE) continue;
+      if (world.get(sx, sy) !== SPAWNER) continue;        // mined out
+
+      data.cooldown -= dt;
+      if (data.cooldown > 0) continue;
+
+      const nearby = this.mobs.filter((m) =>
+        m.def.id === data.mob && Math.hypot(m.x - sx, m.y - sy) < 12).length;
+      if (nearby >= 4) { data.cooldown = SPAWNER_INTERVAL; continue; }
+
+      const def = MOBS[data.mob];
+      if (!def) { data.cooldown = SPAWNER_INTERVAL; continue; }
+
+      // Spawners sit in cramped rooms, so try either side at a few distances
+      // rather than one fixed offset that usually lands inside a wall.
+      let placed = false;
+      for (const dx of SPAWN_OFFSETS) {
+        const cx = this.centreFor(sx + dx, def);
+        const y = this.spawnerY(world, Math.floor(cx), sy, def);
+        if (y === null || !this.fits(world, cx, y, def)) continue;
+
+        const mob = new Mob(def, world, cx, y);
+        if (collides(mob, world)) continue;
+        this.mobs.push(mob);
+        placed = true;
+        break;
+      }
+      // Don't burn the full interval on an attempt that found nowhere to stand.
+      data.cooldown = placed ? SPAWNER_INTERVAL : SPAWNER_RETRY;
     }
   }
 
@@ -422,9 +473,11 @@ export class Entities {
 
     const y = def.aquatic ? this.pickWaterY(world, x, def) : floorY - def.size[1];
     if (y === null) return false;
-    if (!this.fits(world, x, y, def)) return false;
 
-    const mob = new Mob(def, world, x + 0.5, y);
+    const cx = this.centreFor(x, def);
+    if (!this.fits(world, cx, y, def)) return false;
+
+    const mob = new Mob(def, world, cx, y);
     if (collides(mob, world)) return false;
     this.mobs.push(mob);
     return true;
@@ -433,6 +486,20 @@ export class Entities {
   /** Run a burst of attempts so a world isn't empty the moment you arrive. */
   populate(ctx, attempts = 90) {
     for (let i = 0; i < attempts && this.mobs.length < MAX_MOBS; i++) this.trySpawn(ctx);
+  }
+
+  /**
+   * Stand a spawner's mob on the first floor beneath it, rather than at the
+   * spawner's own height -- otherwise a tall mob's box ends up in the ceiling
+   * of the small room the spawner usually sits in.
+   */
+  spawnerY(world, x, sy, def) {
+    if (def.flying) return sy - def.size[1] / 2;
+
+    for (let y = sy; y < Math.min(world.height - 1, sy + 7); y++) {
+      if (isSolid(world.get(x, y))) return y - def.size[1];
+    }
+    return null;
   }
 
   /** Which biome id a spawn point falls in: a cave band if deep, else the surface band. */
@@ -493,20 +560,39 @@ export class Entities {
     return surf + 1 + Math.random() * room;
   }
 
-  /** The mob's box must be clear, and standing mobs need something underfoot. */
-  fits(world, x, y, def) {
+  /**
+   * Centre-x that makes a mob's box cover the fewest whole columns starting at
+   * `col`. Centring a 1.1-wide mob on col+0.5 spreads it over three columns and
+   * it then fails to fit a two-wide gap it would physically occupy.
+   */
+  centreFor(col, def) {
+    return col + Math.max(1, Math.ceil(def.size[0])) / 2;
+  }
+
+  /**
+   * The mob's whole footprint must be clear, and standing mobs need something
+   * underfoot. `cx` is the centre-x, matching how a Mob is constructed.
+   */
+  fits(world, cx, y, def) {
+    const x0 = Math.floor(cx - def.size[0] / 2 + 1e-6);
+    const x1 = Math.floor(cx + def.size[0] / 2 - 1e-6);
     const y0 = Math.floor(y);
     const y1 = Math.floor(y + def.size[1] - 1e-6);
 
-    for (let yy = y0; yy <= y1; yy++) {
-      const id = world.get(x, yy);
-      if (isSolid(id)) return false;
-      if (def.aquatic && !isLiquid(id)) return false;
+    for (let xx = x0; xx <= x1; xx++) {
+      for (let yy = y0; yy <= y1; yy++) {
+        const id = world.get(xx, yy);
+        if (isSolid(id)) return false;
+        if (def.aquatic && !isLiquid(id)) return false;
+      }
     }
     if (def.flying || def.aquatic) return true;
 
-    const below = world.get(x, y1 + 1);
-    return isSolid(below) || (def.floatsOnLava && isLiquid(below));
+    for (let xx = x0; xx <= x1; xx++) {
+      const below = world.get(xx, y1 + 1);
+      if (isSolid(below) || (def.floatsOnLava && isLiquid(below))) return true;
+    }
+    return false;
   }
 }
 

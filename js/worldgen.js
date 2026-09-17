@@ -1,6 +1,7 @@
 import * as B from './blocks.js';
 import { BIOMES } from './biomes.js';
 import { CAVE_TOP_OFFSET, DEEPSLATE_AT, LUSH_CAVES_AT, DEEP_DARK_AT } from './config.js';
+import { placeStructures } from './structures.js';
 
 // ---------------------------------------------------------------- randomness
 
@@ -435,6 +436,7 @@ function generateOverworld(world) {
   for (let x = 0; x < width; x++) world.recalcSurface(x);
   dressCaves(world, rand);
   placeFeatures(world, rand, heights, blendWith, blendAmt);
+  placeStructures(world, rand);
 
   // Spawn in the forest band, as drawn, and put the nether portal beside it.
   const forest = world.bands.find((b) => b.id === 'forest');
@@ -502,6 +504,7 @@ function generateNether(world) {
 
   for (let x = 0; x < width; x++) world.recalcSurface(x);
   placeFeatures(world, rand, heights, blendWith, blendAmt);
+  placeStructures(world, rand);
 
   const wastes = world.bands.find((b) => b.id === 'nether_wastes');
   world.spawnX = wastes ? wastes.mid : Math.floor(width / 2);
@@ -544,6 +547,7 @@ function generateEnd(world) {
 
   for (let x = 0; x < width; x++) world.recalcSurface(x);
   placeFeatures(world, rand, ground, blendWith, blendAmt);
+  placeStructures(world, rand);
 
   const main = world.bands.find((b) => b.id === 'end_main');
   world.spawnX = main ? main.mid : Math.floor(width / 2);

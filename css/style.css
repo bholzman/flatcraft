@@ -71,6 +71,50 @@ html, body {
   opacity: 1;
 }
 
+#tooltip {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 260px;
+  padding: 7px 10px;
+  background: rgba(14, 14, 18, 0.93);
+  border: 1px solid #3a3a46;
+  border-radius: 5px;
+  font-size: 12px;
+  line-height: 1.35;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+  pointer-events: none;
+}
+
+#tooltip.show { opacity: 1; }
+
+#tooltip b { font-size: 13px; }
+
+#tooltip .sub {
+  font-size: 11px;
+  opacity: 0.66;
+}
+
+#tooltip .where {
+  margin-top: 3px;
+  padding-top: 3px;
+  border-top: 1px solid #33333f;
+  font-size: 11px;
+  color: #d9b877;
+}
+
+#tooltip .tag {
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: 10px;
+}
+
+#tooltip .tag.passive { color: #7fd48a; }
+#tooltip .tag.neutral { color: #e8c43a; }
+#tooltip .tag.hostile { color: #e8756a; }
+
 #health {
   position: absolute;
   left: 50%;

@@ -23,6 +23,8 @@ export class World {
 
     this.spawn = null;      // set by the generator
     this.portals = [];      // [{ x, y, to }] built by the generator
+    this.structures = [];   // [{ id, name, x, y }] for the debug readout
+    this.blockData = new Map();   // "x,y" -> chest contents, spawner type, ...
 
     generate(this);
 
@@ -47,9 +49,21 @@ export class World {
 
   set(x, y, id) {
     if (!this.inBounds(x, y)) return false;
+    // Replacing a block discards whatever was attached to it -- a broken chest
+    // must not leave its loot behind for whatever is placed there next.
+    if (this.grid[this.idx(x, y)] !== id) this.blockData.delete(`${x},${y}`);
     this.grid[this.idx(x, y)] = id;
     this.recalcSurface(x);
     return true;
+  }
+
+  /** Per-block state: chest contents, spawner mob, and the like. */
+  dataAt(x, y) {
+    return this.blockData.get(`${x},${y}`) ?? null;
+  }
+
+  setData(x, y, value) {
+    this.blockData.set(`${x},${y}`, value);
   }
 
   /** Unchecked write used by the generator; skips the surface recalc. */
@@ -79,6 +93,14 @@ export class World {
       }
     }
     this.surface[x] = this.height;
+  }
+
+  /** The structure whose footprint contains this cell, if any. */
+  structureAt(x, y) {
+    for (const s of this.structures) {
+      if (x >= s.x0 && x <= s.x1 && y >= s.y0 && y <= s.y1) return s;
+    }
+    return null;
   }
 
   // ---- biome lookup ----

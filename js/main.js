@@ -1,7 +1,10 @@
 import {
   FIXED_DT, MAX_FRAME_DT, REACH, CREATIVE_REACH, REALMS, START_REALM, PORTAL_DWELL,
 } from './config.js';
-import { AIR, NETHER_PORTAL, END_PORTAL, block, isBreakable, isSolid, dropOf } from './blocks.js';
+import {
+  AIR, CHEST, NETHER_PORTAL, END_PORTAL, block, isBreakable, isSolid, dropOf,
+} from './blocks.js';
+import { rollLoot } from './loot.js';
 import { World } from './world.js';
 import { Player } from './player.js';
 import { Input } from './input.js';
@@ -43,6 +46,7 @@ class Game {
     this.mining = null;          // { x, y, id, progress }
     this.hover = null;           // block cell under the cursor, if in reach
     this.target = null;          // mob under the cursor, if in reach
+    this.inspect = null;         // what the cursor is over, for the tooltip
     this.intent = { move: 0, down: false, jumpHeld: false, jumpPressed: false };
     this.placeCooldown = 0;
     this.portalDwell = 0;
@@ -97,6 +101,7 @@ class Game {
 
     this.renderer.follow(this.player, dt);
     this.renderer.draw(this);
+    this.hud.renderTooltip(this.inspect);
     this.hud.renderHealth(this.player, this.mode === 'survival');
     this.hud.renderEffects(this.player);
     this.renderDebug();
@@ -168,6 +173,7 @@ class Game {
       this.hover = null;
       this.mining = null;
       this.target = null;
+      this.inspect = null;
       this.bowDraw = 0;
       return;
     }
@@ -189,15 +195,51 @@ class Game {
     if (wheel) this.inventory.scroll(wheel);
 
     this.updateHover();
+    this.updateInspect();
     this.updateCombat(dt);
     this.updateMining(dt);
     this.updatePlacing();
+  }
+
+  /**
+   * What the cursor is pointing at, for the tooltip. Unlike targeting this
+   * ignores reach and works in every mode -- it only names things.
+   */
+  updateInspect() {
+    const m = this.input.mouse;
+    const w = this.renderer.screenToWorld(m.x, m.y);
+    const bx = Math.floor(w.x);
+    const by = Math.floor(w.y);
+
+    const mob = this.entities.mobs.find((mo) => !mo.dead
+      && w.x > mo.left && w.x < mo.right && w.y > mo.top && w.y < mo.bottom);
+
+    if (!mob && !this.world.inBounds(bx, by)) {
+      this.inspect = null;
+      return;
+    }
+
+    const blockId = this.world.inBounds(bx, by) ? this.world.get(bx, by) : AIR;
+    const structure = this.world.structureAt(bx, by);
+
+    // Nothing worth naming: empty sky that isn't part of anything built.
+    if (!mob && blockId === AIR && !structure) {
+      this.inspect = null;
+      return;
+    }
+
+    this.inspect = {
+      mob, blockId, bx, by, structure,
+      data: this.world.dataAt(bx, by),
+      screenX: m.x, screenY: m.y,
+    };
   }
 
   /** Left click hits a mob if one is under the cursor; otherwise it mines. */
   updateCombat(dt) {
     if (!this.canInteract) {
       this.target = null;
+      this.inspect = null;
       this.bowDraw = 0;
       return;
     }
@@ -522,6 +564,8 @@ class Game {
     if (!this.canInteract) return;
     if (!this.input.mouse.right || !this.hover || this.placeCooldown > 0) return;
 
+    if (this.openChest(x, y)) return;
+
     // Swords, bows and potions are used, not placed.
     const held = this.inventory.held;
     if (held.count > 0 && I.isItem(held.id)) return;
@@ -544,6 +588,48 @@ class Game {
     this.placeCooldown = this.creative ? 0.08 : 0.15;
   }
 
+  /**
+   * Chests roll their loot table the first time they're opened, then stay open.
+   * Anything that doesn't fit is left in the chest to collect later.
+   */
+  openChest(x, y) {
+    if (this.world.get(x, y) !== CHEST) return false;
+
+    const data = this.world.dataAt(x, y);
+    if (!data || data.kind !== 'chest') return false;
+
+    if (!data.opened) {
+      data.items = rollLoot(data.table);
+      data.opened = true;
+    }
+
+    const left = [];
+    let taken = 0;
+    for (const it of data.items) {
+      if (this.inventory.add(it.id, it.count)) taken += it.count;
+      else left.push(it);
+    }
+    data.items = left;
+    this.placeCooldown = 0.3;
+
+    if (taken > 0) {
+      this.hud.announce(left.length ? `Took ${taken} — chest still has items` : `Took ${taken} items`);
+    } else {
+      this.hud.announce(left.length ? 'Inventory full' : 'Empty chest');
+    }
+    return true;
+  }
+
+  nearestStructure() {
+    let best = null;
+    let bestD = Infinity;
+    for (const s of this.world.structures) {
+      const d = Math.abs(s.x - this.player.x);
+      if (d < bestD) { bestD = d; best = s; }
+    }
+    return best ? `${best.name} ${Math.round(bestD)} blocks ${best.x < this.player.x ? 'west' : 'east'}` : '-';
+  }
+
   renderDebug() {
     if (!this.hud.showDebug) return;
     const p = this.player;
@@ -562,6 +648,7 @@ class Game {
       `mobs     ${this.entities.mobs.length}  proj ${this.entities.projectiles.length}`,
       `target   ${this.target ? this.target.def.name : '-'}`,
       `holding  ${this.inventory.describeSelected()}`,
+      `nearest  ${this.nearestStructure()}`,
       `seed     ${this.seed}`,
     ]);
   }
