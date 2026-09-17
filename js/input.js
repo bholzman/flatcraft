@@ -23,6 +23,7 @@ export class Input {
     window.addEventListener('blur', () => {
       this.held.clear();
       this.mouse.left = this.mouse.right = false;
+      this.rightFromCtrl = false;
     });
 
     canvas.addEventListener('mousemove', (e) => {
@@ -31,14 +32,32 @@ export class Input {
       this.mouse.y = e.clientY - r.top;
     });
 
+    // On macOS ctrl+click is the standard secondary click, and a trackpad
+    // without "secondary click" configured has no other way to produce one.
+    // Chrome reports it as button 0 with ctrlKey set, so it has to be mapped
+    // here -- and remembered, because ctrl may be released before the button.
+    this.rightFromCtrl = false;
+
     canvas.addEventListener('mousedown', (e) => {
-      if (e.button === 0) this.mouse.left = true;
-      if (e.button === 2) this.mouse.right = true;
+      if (e.button === 2 || (e.button === 0 && e.ctrlKey)) {
+        this.mouse.right = true;
+        this.rightFromCtrl = e.button === 0;
+      } else if (e.button === 0) {
+        this.mouse.left = true;
+      }
     });
 
     window.addEventListener('mouseup', (e) => {
-      if (e.button === 0) this.mouse.left = false;
-      if (e.button === 2) this.mouse.right = false;
+      if (e.button === 2) {
+        this.mouse.right = false;
+      } else if (e.button === 0) {
+        if (this.rightFromCtrl) {
+          this.mouse.right = false;
+          this.rightFromCtrl = false;
+        } else {
+          this.mouse.left = false;
+        }
+      }
     });
 
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());

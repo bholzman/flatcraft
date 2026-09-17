@@ -238,8 +238,10 @@ class Game {
   /** Left click hits a mob if one is under the cursor; otherwise it mines. */
   updateCombat(dt) {
     if (!this.canInteract) {
+      // Note: `inspect` is deliberately left alone. Spectators can't attack,
+      // but the tooltip only names things, and naming things is the whole
+      // point of spectator mode.
       this.target = null;
-      this.inspect = null;
       this.bowDraw = 0;
       return;
     }
@@ -564,13 +566,15 @@ class Game {
     if (!this.canInteract) return;
     if (!this.input.mouse.right || !this.hover || this.placeCooldown > 0) return;
 
+    const { x, y } = this.hover;
+
+    // Opening a chest takes priority over placing anything into its cell.
     if (this.openChest(x, y)) return;
 
     // Swords, bows and potions are used, not placed.
     const held = this.inventory.held;
     if (held.count > 0 && I.isItem(held.id)) return;
 
-    const { x, y } = this.hover;
     if (!this.world.isReplaceable(x, y)) return;
     if (this.player.overlapsCell(x, y)) return;
 

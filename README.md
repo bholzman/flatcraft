@@ -26,7 +26,7 @@ keep running a stale copy of an edited module until you hard-reload.
 | Right click | Place the selected block |
 | `1`–`9` / scroll | Select hotbar slot |
 | Left click | Mine, or **attack** the mob under the cursor |
-| Right click | Place, **draw the bow**, or **drink/throw a potion** |
+| Right click *(or Ctrl-click)* | Place, open a chest, **draw the bow**, or **drink/throw a potion** |
 | `I` | Backpack |
 | Hover | Tooltip naming the block, mob, or structure under the cursor |
 | `G` | Cycle survival → creative → spectator |
