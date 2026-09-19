@@ -13,6 +13,8 @@ export const GOLDEN_SWORD = 259;
 export const DIAMOND_SWORD = 260;
 export const NETHERITE_SWORD = 261;
 
+export const FLINT_AND_STEEL = 268;
+export const FLINT = 269;
 export const BOW = 270;
 export const ARROW = 271;
 
@@ -41,6 +43,7 @@ export const GHAST_TEAR = 303;
 export const PHANTOM_MEMBRANE = 304;
 export const SHULKER_SHELL = 305;
 export const ECHO_SHARD = 306;
+export const SNOWBALL = 307;
 
 const R = {};
 
@@ -59,6 +62,8 @@ sword(GOLDEN_SWORD, 'Golden Sword', 4, '#f0cf52');
 sword(DIAMOND_SWORD, 'Diamond Sword', 7, '#5fe3dc');
 sword(NETHERITE_SWORD, 'Netherite Sword', 8, '#5a4f52');
 
+def(FLINT_AND_STEEL, 'Flint and Steel', { kind: 'igniter', stack: 1, tint: '#b8b8c0', icon: 'igniter' });
+def(FLINT, 'Flint', { tint: '#4a4a52' });
 def(BOW, 'Bow', { kind: 'bow', stack: 1, tint: '#9c7440', icon: 'bow', drawTime: 1.0, damage: 6 });
 def(ARROW, 'Arrow', { kind: 'ammo', tint: '#c9c4bc', icon: 'arrow' });
 
@@ -90,6 +95,7 @@ def(GHAST_TEAR, 'Ghast Tear', { tint: '#d6ece8' });
 def(PHANTOM_MEMBRANE, 'Phantom Membrane', { tint: '#6a5e7a' });
 def(SHULKER_SHELL, 'Shulker Shell', { tint: '#9a6a9a' });
 def(ECHO_SHARD, 'Echo Shard', { tint: '#1f9a9a' });
+def(SNOWBALL, 'Snowball', { tint: '#e8f2fb', stack: 16 });
 
 export const ITEMS = R;
 

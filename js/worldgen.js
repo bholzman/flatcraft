@@ -149,6 +149,27 @@ function scatterOres(world, rand, heights, veins) {
   }
 }
 
+/**
+ * Cap the waterline with ice wherever the biome is cold enough. Runs after
+ * flooding so it only ever replaces water that actually formed.
+ */
+function freezeSurface(world, blendWith, blendAmt) {
+  const level = world.liquidLevel;
+  if (level < 0) return;
+
+  for (let x = 0; x < world.width; x++) {
+    const bi = materialBiome(world, x, blendWith, blendAmt);
+    if (!bi.freezes) continue;
+
+    // Open ocean freezes a couple of blocks deep; shallows just skin over.
+    const depth = world.ground[x] - level;
+    const thickness = depth > 8 ? 2 : 1;
+    for (let i = 0; i < thickness; i++) {
+      if (world.get(x, level + i) === B.WATER) world.put(x, level + i, B.ICE);
+    }
+  }
+}
+
 /** Flood every air cell at or below the liquid level. */
 function fillLiquid(world, level, liquidId) {
   if (level < 0) return;
@@ -310,6 +331,22 @@ function placeFeatures(world, rand, heights, blendWith, blendAmt) {
       } else if (f.kind === 'pillar' && rand() < f.chance) {
         const h = f.minH + Math.floor(rand() * (f.maxH - f.minH + 1));
         for (let i = 0; i < h; i++) world.put(x, top - i, f.block);
+      } else if (f.kind === 'spike' && rand() < f.chance) {
+        // Tapering spire: wide at the base, a single block at the tip.
+        const h = f.minH + Math.floor(rand() * (f.maxH - f.minH + 1));
+        for (let i = 0; i < h; i++) {
+          const r = Math.round((1 - i / h) * 1.7);
+          for (let dx = -r; dx <= r; dx++) {
+            if (world.get(x + dx, top - i) === B.AIR) world.put(x + dx, top - i, f.block);
+          }
+        }
+      } else if (f.kind === 'patch' && rand() < f.chance) {
+        // A hollow in the ground filled level with the surface -- powder snow
+        // reads as a drift you can fall into rather than a lump sitting on top.
+        const h = f.minH + Math.floor(rand() * (f.maxH - f.minH + 1));
+        for (let dx = -1; dx <= 1; dx++) {
+          for (let dy = 0; dy < h; dy++) world.put(x + dx, top + dy, f.block);
+        }
       } else if (f.kind === 'tree' && rand() < f.chance) {
         if (x - lastTreeX < 3) continue;
         if (!B.isSolid(ground)) continue;
@@ -360,7 +397,7 @@ function buildPortal(world, x, y, frameId, portalId, to) {
 }
 
 /** Drop a portal onto the surface at the first solid column near `nearX`. */
-function portalOnSurface(world, nearX, frameId, portalId, to) {
+export function portalOnSurface(world, nearX, frameId, portalId, to) {
   for (let d = 0; d < 200; d++) {
     for (const x of d === 0 ? [nearX] : [nearX - d, nearX + d]) {
       if (x < 2 || x >= world.width - 3) continue;
@@ -421,6 +458,7 @@ function generateOverworld(world) {
 
   carveCaves(world, caveA, caveB, heights);
   fillLiquid(world, world.liquidLevel, B.WATER);
+  freezeSurface(world, blendWith, blendAmt);
 
   scatterOres(world, rand, heights, [
     { id: B.COAL_ORE, host: B.STONE, rate: 0.45, minDepth: 5, maxDepth: 120, maxSize: 7 },

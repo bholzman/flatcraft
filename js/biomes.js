@@ -122,6 +122,88 @@ export const BIOMES = {
       tree('mangrove', B.MANGROVE_LOG, B.MANGROVE_LEAVES, 0.07, 5, 8)],
   },
 
+
+  // ---------------- overworld: the polar rim ----------------
+  frozen_ocean: {
+    name: 'Frozen Ocean',
+    height: { base: 133, amp: 4, freq: 44 },
+    surface: B.GRAVEL, sub: B.GRAVEL, subDepth: 3, stone: B.STONE,
+    freezes: true,                    // the waterline is capped with ice
+    sky: ['#5d86ae', '#cfe2ee'],
+    features: [],
+  },
+  snowy_beach: {
+    name: 'Snowy Beach',
+    height: { base: 117, amp: 3, freq: 30 },
+    surface: B.SNOW_BLOCK, sub: B.SAND, subDepth: 5, rock: B.SANDSTONE, rockDepth: 6, stone: B.STONE,
+    freezes: true,
+    sky: ['#6a93bc', '#dbe9f2'],
+    features: [plant(B.SNOW_LAYER, 0.3)],
+  },
+  snowy_plains: {
+    name: 'Snowy Plains',
+    height: { base: 110, amp: 5, freq: 32 },
+    surface: B.SNOW_BLOCK, sub: B.DIRT, subDepth: 4, stone: B.STONE,
+    freezes: true,
+    sky: ['#6e97c0', '#dce9f4'],
+    features: [plant(B.SNOW_LAYER, 0.45),
+      tree('spruce', B.SPRUCE_LOG, B.SPRUCE_LEAVES, 0.012, 6, 9)],
+  },
+  ice_spikes: {
+    name: 'Ice Spikes',
+    height: { base: 109, amp: 5, freq: 28 },
+    surface: B.SNOW_BLOCK, sub: B.PACKED_ICE, subDepth: 3, stone: B.STONE,
+    freezes: true,
+    sky: ['#6a9ccb', '#d6ecf8'],
+    features: [{ kind: 'spike', block: B.PACKED_ICE, chance: 0.07, minH: 6, maxH: 16 },
+      plant(B.SNOW_LAYER, 0.3)],
+  },
+  snowy_taiga: {
+    name: 'Snowy Taiga',
+    height: { base: 107, amp: 8, freq: 32 },
+    surface: B.SNOW_BLOCK, sub: B.DIRT, subDepth: 4, stone: B.STONE,
+    freezes: true,
+    sky: ['#628cb4', '#cfe0ec'],
+    features: [plant(B.SNOW_LAYER, 0.4),
+      tree('spruce', B.SPRUCE_LOG, B.SPRUCE_LEAVES, 0.13, 7, 13)],
+  },
+  grove: {
+    name: 'Grove',
+    height: { base: 100, amp: 12, freq: 36 },
+    surface: B.SNOW_BLOCK, sub: B.DIRT, subDepth: 4, stone: B.STONE,
+    freezes: true,
+    sky: ['#5f8cb8', '#d2e4f0'],
+    features: [plant(B.SNOW_LAYER, 0.5),
+      tree('spruce', B.SPRUCE_LOG, B.SPRUCE_LEAVES, 0.16, 8, 14)],
+  },
+  snowy_slopes: {
+    name: 'Snowy Slopes',
+    height: { base: 82, amp: 22, freq: 44 },
+    surface: B.SNOW_BLOCK, sub: B.SNOW_BLOCK, subDepth: 3, rock: B.STONE, rockDepth: 8, stone: B.STONE,
+    freezes: true,
+    sky: ['#5a88b6', '#d8e8f4'],
+    features: [plant(B.SNOW_LAYER, 0.4),
+      { kind: 'patch', block: B.POWDER_SNOW, chance: 0.05, minH: 2, maxH: 4 }],
+  },
+  frozen_peaks: {
+    name: 'Frozen Peaks',
+    height: { base: 58, amp: 30, freq: 52 },
+    surface: B.SNOW_BLOCK, sub: B.PACKED_ICE, subDepth: 4, rock: B.STONE, rockDepth: 10, stone: B.STONE,
+    freezes: true,
+    sky: ['#4f80b0', '#e2eef8'],
+    features: [plant(B.SNOW_LAYER, 0.35),
+      { kind: 'spike', block: B.BLUE_ICE, chance: 0.03, minH: 4, maxH: 9 }],
+  },
+  jagged_peaks: {
+    name: 'Jagged Peaks',
+    height: { base: 52, amp: 34, freq: 46 },
+    surface: B.SNOW_BLOCK, sub: B.STONE, subDepth: 5, stone: B.STONE,
+    freezes: true,
+    sky: ['#4a7cad', '#e6f0f8'],
+    features: [plant(B.SNOW_LAYER, 0.3),
+      { kind: 'spike', block: B.STONE, chance: 0.06, minH: 5, maxH: 14 }],
+  },
+
   // ---------------- overworld underground (depth bands) ----------------
   caves: {
     name: 'Caves', underground: true,
@@ -214,10 +296,20 @@ export const BIOMES = {
 // The full left-to-right layout is outward + centre + outward reversed.
 export const LAYOUTS = {
   overworld: {
-    outward: ['ocean', 'desert', 'mesa', 'plains', 'savanna', 'meadow',
-      'taiga', 'birch_forest', 'dark_forest', 'jungle', 'forest'],
+    // Outermost ring inward. The drawn map is concentric, so reading it as
+    // climate bands puts the polar rim at the world edge and the warm, wet
+    // core at the centre. Reorder this array to move a biome.
+    outward: [
+      'frozen_ocean', 'snowy_beach', 'snowy_plains', 'ice_spikes', 'snowy_taiga',
+      'grove', 'snowy_slopes', 'frozen_peaks', 'jagged_peaks',
+      'ocean', 'desert', 'mesa', 'plains', 'savanna', 'meadow',
+      'taiga', 'birch_forest', 'dark_forest', 'jungle', 'forest',
+    ],
     center: ['lake', 'swamp'],
     weights: {
+      frozen_ocean: 1.6, snowy_beach: 0.8, snowy_plains: 1.1, ice_spikes: 0.9,
+      snowy_taiga: 1.1, grove: 1.0, snowy_slopes: 1.2, frozen_peaks: 1.3,
+      jagged_peaks: 1.2,
       ocean: 2.2, desert: 1.3, mesa: 1.7, plains: 1.1, savanna: 1.0, meadow: 1.0,
       taiga: 1.0, birch_forest: 0.9, dark_forest: 1.0, jungle: 1.0, forest: 1.2,
       lake: 1.0, swamp: 1.0,

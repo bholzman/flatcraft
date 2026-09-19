@@ -509,6 +509,20 @@ const ITEM_PAINTERS = {
     g.fillRect(6, 8, 2, 1);
   },
 
+  igniter: (g, base) => {
+    g.fillStyle = css(base);                              // steel striker
+    g.beginPath();
+    g.moveTo(3, 4); g.lineTo(9, 4); g.lineTo(9, 7); g.lineTo(5, 7); g.lineTo(5, 10); g.lineTo(3, 10);
+    g.closePath(); g.fill();
+    g.fillStyle = '#4a4a52';                              // flint
+    g.fillRect(9, 9, 5, 4);
+    g.fillStyle = '#f0c04a';                              // sparks
+    g.fillRect(7, 8, 2, 2);
+    g.fillRect(11, 6, 1, 1);
+    g.fillStyle = '#fff3c4';
+    g.fillRect(8, 8, 1, 1);
+  },
+
   material: (g, base, d) => {
     grain(g, base, d.id, 0.3);
     g.fillStyle = 'rgba(0,0,0,0.35)';

@@ -11,6 +11,7 @@ export const LOOT = {
     e(B.OAK_PLANKS, 0.8, 4, 12), e(I.RAW_BEEF, 0.5, 1, 3),
     e(I.LEATHER, 0.4, 1, 3), e(B.HAY_BALE, 0.4, 1, 3),
     e(I.IRON_SWORD, 0.15, 1), e(I.ARROW, 0.35, 3, 8),
+    e(I.FLINT_AND_STEEL, 0.25, 1), e(I.FLINT, 0.4, 1, 3),
     e(B.IRON_ORE, 0.3, 1, 4), e(I.POTION_HEALING, 0.12, 1),
   ],
   desert_pyramid: [
@@ -28,6 +29,12 @@ export const LOOT = {
     e(I.SPIDER_EYE, 0.7, 1, 4), e(I.GUNPOWDER, 0.5, 1, 4),
     e(I.POTION_HARMING, 0.3, 1, 2), e(B.MUD, 0.5, 4, 10),
     e(I.SLIME_BALL, 0.4, 1, 3),
+  ],
+  igloo: [
+    e(B.SNOW_BLOCK, 0.8, 4, 12), e(I.RAW_BEEF, 0.5, 1, 3),
+    e(B.ICE, 0.5, 2, 6), e(I.POTION_FIRE_RESISTANCE, 0.2, 1),
+    e(I.LEATHER, 0.4, 1, 3), e(B.GOLD_ORE, 0.25, 1, 3),
+    e(I.SNOWBALL, 0.6, 2, 8),
   ],
   mansion: [
     e(I.DIAMOND_SWORD, 0.12, 1), e(B.DIAMOND_ORE, 0.2, 1, 3),
@@ -79,10 +86,12 @@ export const LOOT = {
   ruined_portal: [
     e(B.OBSIDIAN, 0.5, 1, 4), e(B.GOLD_ORE, 0.5, 1, 5),
     e(I.POTION_FIRE_RESISTANCE, 0.3, 1), e(B.CRYING_OBSIDIAN, 0.3, 1, 2),
+    e(I.FLINT_AND_STEEL, 0.6, 1), e(I.FLINT, 0.5, 1, 3),
   ],
   nether_fortress: [
     e(I.BLAZE_ROD, 0.5, 1, 3), e(B.NETHER_GOLD_ORE, 0.5, 2, 6),
     e(I.DIAMOND_SWORD, 0.1, 1), e(B.NETHER_BRICK, 0.6, 6, 16),
+    e(I.FLINT_AND_STEEL, 0.4, 1),
     e(I.POTION_FIRE_RESISTANCE, 0.4, 1, 2),
   ],
   bastion: [

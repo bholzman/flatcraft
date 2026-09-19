@@ -28,6 +28,7 @@ keep running a stale copy of an edited module until you hard-reload.
 | Left click | Mine, or **attack** the mob under the cursor |
 | Right click *(or Ctrl-click)* | Place, open a chest, **draw the bow**, or **drink/throw a potion** |
 | `I` | Backpack |
+| `M` | Toggle the map overlay |
 | Hover | Tooltip naming the block, mob, or structure under the cursor |
 | `G` | Cycle survival → creative → spectator |
 | `B` | Travel to any biome or structure (creative / spectator) |
@@ -46,20 +47,45 @@ Stand in a portal for a moment to change realm.
 
 Only survival takes damage; creative and spectator are invulnerable.
 
+## Day and night
+
+A full cycle runs ten minutes: sunrise, day, sunset, night, with a sun, a moon
+and stars crossing the sky. It is not just a tint — **nothing hostile spawns
+on the open surface in daylight**, and after dark the surface accepts the same
+mobs a cave does. Caves stay dangerous around the clock, and the Nether and
+End have no cycle at all.
+
+## Map
+
+`M` toggles a corner overlay showing ~200 × 112 blocks around you: terrain,
+caves, mobs coloured by behaviour, structures in gold and portals in violet.
+Terrain is resampled four times a second onto a coarse buffer rather than
+drawn per block — at 4096 wide a faithful map would cost more than the game.
+
+## Portals
+
+Build a frame of obsidian at least 2 wide and 3 tall and light the inside with
+**flint and steel**. Portals pair up: the far side is built for you if there
+isn't one nearby, and the return trip lands where you started rather than
+drifting a little further each crossing. Flint and steel is in the starter
+kit, in several loot tables, and gravel drops flint.
+
 ## Mobs and combat
 
-44 mobs spawn into the biomes they belong in — pigs and bees in the plains,
+47 mobs spawn into the biomes they belong in — pigs and bees in the plains,
 husks and rabbits in the desert, dolphins and drowned in the ocean, frogs and
-witches in the swamp, axolotls and glow squid in the lush caves, wardens in the
-deep dark, piglins and ghasts in the Nether, endermen and shulkers in the End.
+witches in the swamp, polar bears and strays in the snow, axolotls and glow
+squid in the lush caves, wardens in the deep dark, piglins and ghasts in the
+Nether, endermen and shulkers in the End.
 
-- **Passive** (15) wander, and flee when hit.
-- **Neutral** (10) ignore you until provoked, then fight back.
-- **Hostile** (19) hunt you on sight, and some shoot: skeletons fire arrows,
-  ghasts and blazes fire fireballs, witches throw splash potions.
+- **Passive** (16) wander, and flee when hit.
+- **Neutral** (11) ignore you until provoked, then fight back.
+- **Hostile** (20) hunt you on sight, and some shoot: skeletons and strays fire
+  arrows, ghasts and blazes fire fireballs, witches throw splash potions.
 
 Spawning follows the player's depth, so digging down changes what you meet
-rather than filling the surface far above you.
+rather than filling the surface far above you, and the time of day decides
+whether the surface is safe.
 
 Combat: six sword tiers (4–8 damage, 1 bare-handed), a bow that charges while
 you hold right click, and six potions — healing, regeneration, strength,
@@ -139,11 +165,11 @@ js/entities.js   mob AI, projectiles, ballistics, spawning
 js/physics.js    shared AABB sweep used by the player and every mob
 js/structures.js structure registry, cross-section builders, placement
 js/loot.js       per-structure chest loot tables
+js/minimap.js    corner map overlay
 ```
 
 ## Not built yet
 
-Crafting, tool tiers, hunger, a day–night cycle (hostile spawns currently key
-off depth instead of light level), world save/load, chunked streaming, sound,
+Crafting, tool tiers, hunger, world save/load, chunked streaming, sound,
 breeding/taming. The Ender Dragon exists and fights, but has no boss mechanics
 — no perches, healing crystals, or end-of-fight sequence.

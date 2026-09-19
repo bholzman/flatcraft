@@ -184,6 +184,14 @@ export const DEEPSLATE_TILES = 141;
 export const SOUL_LANTERN = 142;
 export const CHISELED_RED_SANDSTONE = 143;
 
+// --- snow and ice ---
+export const SNOW_BLOCK = 144;
+export const SNOW_LAYER = 145;
+export const ICE = 146;
+export const PACKED_ICE = 147;
+export const BLUE_ICE = 148;
+export const POWDER_SNOW = 149;
+
 const R = {};   // id -> definition
 
 function def(id, name, opts = {}) {
@@ -209,7 +217,7 @@ def(DIRT, 'Dirt', { hardness: 0.5, tint: '#8b6141' });
 def(GRASS, 'Grass Block', { hardness: 0.6, tint: '#5d9b3f', style: 'grass', soil: DIRT, drops: DIRT });
 def(SAND, 'Sand', { hardness: 0.5, tint: '#dbcd8f' });
 def(SANDSTONE, 'Sandstone', { hardness: 0.9, tint: '#cfc08a', style: 'layered' });
-def(GRAVEL, 'Gravel', { hardness: 0.6, tint: '#84807e', style: 'cobble' });
+def(GRAVEL, 'Gravel', { hardness: 0.6, tint: '#84807e', style: 'cobble' });   // sometimes drops flint
 def(CLAY, 'Clay', { hardness: 0.6, tint: '#a0a6b0' });
 def(ANDESITE, 'Andesite', { hardness: 1.5, tint: '#8a8a8a' });
 def(GRANITE, 'Granite', { hardness: 1.5, tint: '#9b6a55' });
@@ -359,6 +367,13 @@ def(SOUL_LANTERN, 'Soul Lantern', { solid: false, hardness: 0.5, tint: '#4ad8e0'
 def(BARREL, 'Barrel', { hardness: 1.0, tint: '#8a6a40', style: 'log' });
 def(DEEPSLATE_BRICKS, 'Deepslate Bricks', { hardness: 2.4, tint: '#44444c', style: 'bricks' });
 def(DEEPSLATE_TILES, 'Deepslate Tiles', { hardness: 2.4, tint: '#35353d', style: 'layered' });
+
+def(SNOW_BLOCK, 'Snow Block', { hardness: 0.4, tint: '#f0f4f8' });
+def(SNOW_LAYER, 'Snow', { solid: false, hardness: 0.1, tint: '#f4f8fc', style: 'flat' });
+def(ICE, 'Ice', { hardness: 0.6, tint: '#9dc2ee', style: 'glass', slippery: true });
+def(PACKED_ICE, 'Packed Ice', { hardness: 1.0, tint: '#83abdd', slippery: true });
+def(BLUE_ICE, 'Blue Ice', { hardness: 1.4, tint: '#5f96d8', slippery: true });
+def(POWDER_SNOW, 'Powder Snow', { solid: false, hardness: 0.3, tint: '#e8f2fb', style: 'plain' });
 
 export const BLOCKS = R;
 

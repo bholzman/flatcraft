@@ -5,12 +5,41 @@ export const ZOOM = 2;               // integer scale factor applied to TILE
 
 // Each realm is its own world, with its own size and waterline.
 export const REALMS = {
-  overworld: { w: 2048, h: 320, liquidLevel: 118, surfaceLevel: 110, liquid: 'water' },
-  nether:    { w: 1024, h: 192, liquidLevel: 58, surfaceLevel: 42, liquid: 'lava', ceiling: 6 },
-  end:       { w: 768,  h: 160, liquidLevel: -1, surfaceLevel: 70,  liquid: null },
+  overworld: { w: 4096, h: 320, liquidLevel: 118, surfaceLevel: 110, liquid: 'water' },
+  nether:    { w: 2048, h: 192, liquidLevel: 58, surfaceLevel: 42, liquid: 'lava', ceiling: 6 },
+  end:       { w: 1536, h: 160, liquidLevel: -1, surfaceLevel: 70,  liquid: null },
 };
 
 export const START_REALM = 'overworld';
+
+// ---- day / night ----
+// One full cycle in seconds. Phase runs 0 = sunrise, 0.25 = noon,
+// 0.5 = sunset, 0.75 = midnight.
+export const DAY_LENGTH = 600;
+export const START_PHASE = 0.12;     // start mid-morning
+
+/** Surface light from the sky, 0 at night to 1 in full day. */
+export function dayLightAt(phase) {
+  const t = ((phase % 1) + 1) % 1;
+  if (t < 0.06) return t / 0.06;                     // sunrise
+  if (t < 0.44) return 1;                            // day
+  if (t < 0.52) return 1 - (t - 0.44) / 0.08;        // sunset
+  if (t < 0.96) return 0;                            // night
+  return (t - 0.96) / 0.04;                          // pre-dawn
+}
+
+/** Name of the current phase, for the readouts. */
+export function phaseName(phase) {
+  const t = ((phase % 1) + 1) % 1;
+  if (t < 0.06) return 'Sunrise';
+  if (t < 0.22) return 'Morning';
+  if (t < 0.3) return 'Noon';
+  if (t < 0.44) return 'Afternoon';
+  if (t < 0.52) return 'Sunset';
+  if (t < 0.72) return 'Night';
+  if (t < 0.9) return 'Midnight';
+  return 'Late night';
+}
 
 // Overworld underground bands, as a fraction of world height.
 export const CAVE_TOP_OFFSET = 8;    // blocks below the surface where caves start
@@ -54,3 +83,4 @@ export const MAX_FRAME_DT = 0.25;    // clamp so a stalled tab doesn't teleport 
 // on screen -- the camera never clamps at a world edge to break that.
 export const CAMERA_SMOOTH = 0.0015; // remaining fraction of the gap after 1s
 export const PORTAL_DWELL = 0.9;     // seconds standing in a portal before travel
+export const PORTAL_LINK_RANGE = 240; // how far a destination portal may be before one is built

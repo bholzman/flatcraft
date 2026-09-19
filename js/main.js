@@ -1,8 +1,9 @@
 import {
   FIXED_DT, MAX_FRAME_DT, REACH, CREATIVE_REACH, REALMS, START_REALM, PORTAL_DWELL,
+  PORTAL_LINK_RANGE, DAY_LENGTH, START_PHASE, dayLightAt, phaseName,
 } from './config.js';
 import {
-  AIR, CHEST, NETHER_PORTAL, END_PORTAL, block, isBreakable, isSolid, dropOf,
+  AIR, CHEST, GRAVEL, OBSIDIAN, NETHER_PORTAL, END_PORTAL, block, isBreakable, isSolid, dropOf,
 } from './blocks.js';
 import { rollLoot } from './loot.js';
 import { World } from './world.js';
@@ -14,6 +15,8 @@ import { HUD } from './hud.js';
 import { bakeAll } from './textures.js';
 import { BIOMES } from './biomes.js';
 import { Entities, Projectile, ballisticVelocity } from './entities.js';
+import { portalOnSurface } from './worldgen.js';
+import { Minimap } from './minimap.js';
 import * as I from './items.js';
 
 const PORTAL_IDS = new Set([NETHER_PORTAL, END_PORTAL]);
@@ -41,6 +44,7 @@ class Game {
     this.inventory.giveStarter();
     this.mode = 'survival';
     this.entities = new Entities();
+    this.minimap = new Minimap(document.getElementById('minimap'));
     this.hud = new HUD(this);
 
     this.mining = null;          // { x, y, id, progress }
@@ -48,6 +52,7 @@ class Game {
     this.target = null;          // mob under the cursor, if in reach
     this.inspect = null;         // what the cursor is over, for the tooltip
     this.structureCursor = new Map();   // realm:id -> which instance to visit next
+    this.worldTime = START_PHASE * DAY_LENGTH;   // seconds into the current day
     this.intent = { move: 0, down: false, jumpHeld: false, jumpPressed: false };
     this.placeCooldown = 0;
     this.portalDwell = 0;
@@ -64,6 +69,17 @@ class Game {
     this.renderer.snapTo(this.player);
     this.frame = this.frame.bind(this);
   }
+
+  /** 0 = sunrise, 0.25 = noon, 0.5 = sunset, 0.75 = midnight. */
+  get timeOfDay() { return (this.worldTime / DAY_LENGTH) % 1; }
+
+  /** Sky light, 0 at night to 1 in full day. Other realms are always lit. */
+  get dayLight() {
+    return this.realm === 'overworld' ? dayLightAt(this.timeOfDay) : 1;
+  }
+
+  /** Dark enough for hostile mobs to spawn out in the open. */
+  get isNight() { return this.dayLight < 0.25; }
 
   get creative() { return this.mode === 'creative'; }
 
@@ -102,6 +118,8 @@ class Game {
 
     this.renderer.follow(this.player, dt);
     this.renderer.draw(this);
+    this.minimap.update(dt, this);
+    this.hud.renderMinimapLabel(this);
     this.hud.renderTooltip(this.inspect);
     this.hud.renderHealth(this.player, this.mode === 'survival');
     this.hud.renderEffects(this.player);
@@ -112,6 +130,7 @@ class Game {
   }
 
   step(dt) {
+    this.worldTime = (this.worldTime + dt) % DAY_LENGTH;
     this.player.update(dt, this.intent);
     this.intent.jumpPressed = false;      // a buffered jump only fires once
     this.placeCooldown = Math.max(0, this.placeCooldown - dt);
@@ -141,6 +160,7 @@ class Game {
       player: this.player,
       mobs: this.entities.mobs,
       playerVulnerable: this.vulnerable,
+      night: this.isNight,
       damagePlayer: (amount, fromX) => {
         if (!this.vulnerable) return;
         if (this.player.hurt(amount, fromX) && this.player.dead) this.onPlayerDeath();
@@ -155,6 +175,10 @@ class Game {
 
     if (input.consumePress('KeyG')) this.cycleMode();
     if (input.consumePress('F3')) this.hud.toggleDebug();
+    if (input.consumePress('KeyM')) {
+      this.minimap.toggle();
+      document.getElementById('minimap-wrap').classList.toggle('hidden', !this.minimap.visible);
+    }
     // Travel is for exploring, so spectators get it too; the block palette is
     // only useful to someone who can actually place a block.
     if (this.mode !== 'survival' && input.consumePress('KeyB')) this.hud.toggleBiomes();
@@ -432,18 +456,46 @@ class Game {
       ? (this.realm === 'nether' ? 'overworld' : 'nether')
       : (this.realm === 'end' ? 'overworld' : 'end');
 
-    this.travelTo(target);
+    this.travelTo(target, this.player.x);
   }
 
-  travelTo(realm) {
+  travelTo(realm, fromX = null) {
     if (!REALMS[realm]) return;
 
+    const from = this.world;
+    const cameFrom = this.realm;
     const world = this.getWorld(realm);
+
+    // Map the crossing point into the destination's coordinates, so a portal
+    // you built somewhere specific lands you somewhere corresponding.
+    const mapped = fromX === null
+      ? world.spawnX
+      : Math.round(fromX * (world.width / from.width));
+
+    // Which portal did the player step into? If it already has a counterpart,
+    // go straight there -- otherwise a round trip drifts a little each way and
+    // eventually strands a second portal beside the first.
+    const source = fromX === null ? null : this.nearestPortalTo(from, fromX);
+    let portal = source?.link && world.portals.includes(source.link)
+      ? source.link
+      : this.nearestPortal(world, cameFrom, mapped);
+
+    // Nothing to arrive at nearby? Build the matching portal, the way
+    // Minecraft carves one out for you on the far side.
+    if (realm !== 'end' && cameFrom !== 'end'
+        && (!portal || Math.abs(portal.x - mapped) > PORTAL_LINK_RANGE)) {
+      portal = this.buildLinkedPortal(world, mapped, cameFrom);
+    }
+
+    // Pair them so the journey back lands where it started.
+    if (source && portal) {
+      source.link = portal;
+      portal.link = source;
+    }
+
     this.realm = realm;
     this.world = world;
 
-    // Arrive at that realm's own portal if it has one, else at its spawn.
-    const portal = world.portals.find((p) => p.to !== realm) ?? null;
     const at = portal
       ? { x: portal.x, y: portal.y - 1 }
       : world.spawnPoint(world.spawnX);
@@ -572,6 +624,32 @@ class Game {
     this.hud.announce('Respawned');
   }
 
+  /** The nearest portal in `world` to `x`, whatever it leads to. */
+  nearestPortalTo(world, x) {
+    let best = null;
+    for (const p of world.portals) {
+      if (!best || Math.abs(p.x - x) < Math.abs(best.x - x)) best = p;
+    }
+    return best && Math.abs(best.x - x) < 4 ? best : null;
+  }
+
+  /** The portal in `world` leading back to `cameFrom`, nearest to `x`. */
+  nearestPortal(world, cameFrom, x) {
+    let best = null;
+    for (const p of world.portals) {
+      if (p.to !== cameFrom) continue;
+      if (!best || Math.abs(p.x - x) < Math.abs(best.x - x)) best = p;
+    }
+    return best;
+  }
+
+  buildLinkedPortal(world, nearX, backTo) {
+    const x = portalOnSurface(world, nearX, OBSIDIAN, NETHER_PORTAL, backTo);
+    // portalOnSurface writes with put(), which skips the surface bookkeeping.
+    for (let dx = -2; dx <= 3; dx++) world.recalcSurface(x + dx);
+    return world.portals[world.portals.length - 1] ?? null;
+  }
+
   // ---- interaction ----
 
   updateHover() {
@@ -616,7 +694,9 @@ class Game {
 
     if (this.mining.progress >= 1) {
       this.world.set(target.x, target.y, AIR);
-      this.inventory.add(dropOf(id), 1);
+      // Gravel sometimes yields flint, so flint and steel stays renewable.
+      const drop = id === GRAVEL && Math.random() < 0.15 ? I.FLINT : dropOf(id);
+      this.inventory.add(drop, 1);
       this.mining = null;
     }
   }
@@ -630,8 +710,13 @@ class Game {
     // Opening a chest takes priority over placing anything into its cell.
     if (this.openChest(x, y)) return;
 
-    // Swords, bows and potions are used, not placed.
     const held = this.inventory.held;
+    if (held.count > 0 && I.item(held.id)?.kind === 'igniter') {
+      this.lightPortal(x, y);
+      return;
+    }
+
+    // Swords, bows and potions are used, not placed.
     if (held.count > 0 && I.isItem(held.id)) return;
 
     if (!this.world.isReplaceable(x, y)) return;
@@ -649,6 +734,59 @@ class Game {
 
     this.world.set(x, y, id);
     this.placeCooldown = this.creative ? 0.08 : 0.15;
+  }
+
+  /**
+   * Light an obsidian frame around (x, y), the way flint and steel does.
+   * The clicked cell has to sit inside a rectangle of air completely ringed
+   * by obsidian, at least 2 wide and 3 tall.
+   */
+  lightPortal(x, y) {
+    const w = this.world;
+    if (w.get(x, y) !== AIR) return false;
+
+    // Grow to the extent of the open space through the clicked cell. Bounded
+    // in every direction: above the world every cell reads as air, so an
+    // unbounded upward walk never terminates.
+    const MAX = 22;
+    let x0 = x;
+    let x1 = x;
+    let y0 = y;
+    let y1 = y;
+    while (x - x0 < MAX && w.get(x0 - 1, y) === AIR) x0--;
+    while (x1 - x < MAX && w.get(x1 + 1, y) === AIR) x1++;
+    while (y - y0 < MAX && y0 > 0 && w.get(x, y0 - 1) === AIR) y0--;
+    while (y1 - y < MAX && w.get(x, y1 + 1) === AIR) y1++;
+
+    const width = x1 - x0 + 1;
+    const height = y1 - y0 + 1;
+    if (width < 2 || height < 3 || width > 21 || height > 21) return false;
+
+    for (let yy = y0; yy <= y1; yy++) {
+      for (let xx = x0; xx <= x1; xx++) {
+        if (w.get(xx, yy) !== AIR) return false;          // not a clean rectangle
+      }
+    }
+    for (let xx = x0; xx <= x1; xx++) {
+      if (w.get(xx, y0 - 1) !== OBSIDIAN || w.get(xx, y1 + 1) !== OBSIDIAN) return false;
+    }
+    for (let yy = y0; yy <= y1; yy++) {
+      if (w.get(x0 - 1, yy) !== OBSIDIAN || w.get(x1 + 1, yy) !== OBSIDIAN) return false;
+    }
+
+    for (let yy = y0; yy <= y1; yy++) {
+      for (let xx = x0; xx <= x1; xx++) w.set(xx, yy, NETHER_PORTAL);
+    }
+    w.portals.push({
+      x: (x0 + x1) / 2 + 0.5,
+      y: y1 - 1,
+      to: this.realm === 'nether' ? 'overworld' : 'nether',
+      built: true,
+    });
+
+    this.placeCooldown = 0.4;
+    this.hud.announce('Portal lit');
+    return true;
   }
 
   /**
@@ -703,6 +841,7 @@ class Game {
       `fps      ${this.fps.toFixed(0)}`,
       `realm    ${this.realm}  [${this.mode}]`,
       `biome    ${biome.name}`,
+      `time     ${phaseName(this.timeOfDay)} (${(this.timeOfDay * 24).toFixed(1)}h, light ${this.dayLight.toFixed(2)})`,
       `pos      ${p.x.toFixed(1)}, ${p.y.toFixed(1)}`,
       `depth    ${(p.y - this.world.ground[Math.max(0, Math.min(this.world.width - 1, p.x | 0))]).toFixed(0)}`,
       `ground   ${p.onGround}${p.inLiquid ? ' (in liquid)' : ''}`,

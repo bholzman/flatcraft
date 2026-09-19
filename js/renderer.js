@@ -8,6 +8,8 @@ const BLEND = 16;                 // must match the generator's band cross-fade
 
 const REALM_AMBIENT = { overworld: '#1d1a24', nether: '#2a1212', end: '#0a0710' };
 const VOID_COLOUR = '#07060b';
+const NIGHT_ZENITH = [6, 8, 22];
+const NIGHT_HORIZON = [26, 30, 58];
 
 function hexToRgb(hex) {
   const n = parseInt(hex.slice(1), 16);
@@ -126,8 +128,16 @@ export class Renderer {
     ];
   }
 
-  drawSky(ctx, world, player) {
-    const [zenith, horizon] = this.skyAt(world, player.x);
+  drawSky(ctx, world, player, light, phase) {
+    let [zenith, horizon] = this.skyAt(world, player.x);
+
+    // Night falls on the sky first; sunrise and sunset warm the horizon as
+    // they pass through.
+    if (light < 1) {
+      const dusk = Math.sin(light * Math.PI);          // peaks mid-transition
+      zenith = mix(NIGHT_ZENITH, zenith, light);
+      horizon = mix(mix(NIGHT_HORIZON, horizon, light), [236, 140, 78], dusk * 0.45);
+    }
 
     // Underground, fade the whole sky toward the cave band's ambient colour so
     // the light visibly drains away as the player digs down.
@@ -145,6 +155,61 @@ export class Renderer {
     g.addColorStop(1, rgbCss(mix(bottom, ambient, 0.75)));
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, this.viewW, this.viewH);
+
+    if (phase !== null && sink < 0.95) this.drawCelestials(ctx, phase, light, 1 - sink);
+  }
+
+  /** Stars, then whichever of the sun or moon is currently up. */
+  drawCelestials(ctx, phase, light, strength) {
+    const horizonY = this.viewH * 0.62;
+
+    if (light < 0.9) {
+      ctx.save();
+      ctx.globalAlpha = (1 - light) * strength * 0.9;
+      ctx.fillStyle = '#ffffff';
+      for (let i = 0; i < 70; i++) {
+        // Fixed pattern, drifting slowly westward with the sky.
+        const sx = (i * 137.5 + phase * this.viewW * 0.4) % this.viewW;
+        const sy = (i * 61.8) % horizonY;
+        ctx.fillRect(sx, sy, i % 9 === 0 ? 2 : 1, i % 9 === 0 ? 2 : 1);
+      }
+      ctx.restore();
+    }
+
+    // Day runs phase 0 -> 0.5, night 0.5 -> 1; each body arcs across in its half.
+    const isDay = phase < 0.5;
+    const t = isDay ? phase / 0.5 : (phase - 0.5) / 0.5;
+    const x = t * this.viewW;
+    const y = horizonY - Math.sin(t * Math.PI) * horizonY * 0.78;
+    const r = isDay ? 26 : 20;
+
+    ctx.save();
+    ctx.globalAlpha = strength;
+    const grad = ctx.createRadialGradient(x, y, 0, x, y, r * 2.6);
+    if (isDay) {
+      grad.addColorStop(0, 'rgba(255,246,200,0.95)');
+      grad.addColorStop(0.28, 'rgba(255,224,130,0.5)');
+      grad.addColorStop(1, 'rgba(255,210,120,0)');
+    } else {
+      grad.addColorStop(0, 'rgba(226,232,255,0.85)');
+      grad.addColorStop(0.3, 'rgba(180,196,255,0.28)');
+      grad.addColorStop(1, 'rgba(150,170,255,0)');
+    }
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(x, y, r * 2.6, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = isDay ? '#fff6c8' : '#e6ecff';
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+    if (!isDay) {                                      // a couple of craters
+      ctx.fillStyle = 'rgba(160,172,210,0.55)';
+      ctx.beginPath(); ctx.arc(x - r * 0.3, y - r * 0.2, r * 0.26, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(x + r * 0.25, y + r * 0.3, r * 0.18, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
   }
 
   ambientAt(world, y) {
@@ -158,8 +223,13 @@ export class Renderer {
     const { world, player, hover, mining } = state;
     const ctx = this.ctx;
 
+    // Only the overworld has a sky to run a cycle in.
+    const hasSky = world.realm === 'overworld';
+    const light = hasSky ? state.dayLight : 1;
+    const phase = hasSky ? state.timeOfDay : null;
+
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    this.drawSky(ctx, world, player);
+    this.drawSky(ctx, world, player, light, phase);
 
     // Snap the camera to whole device pixels to avoid texture seams.
     const camPx = Math.round(this.camera.x * SCALE * this.dpr) / this.dpr;
@@ -168,7 +238,7 @@ export class Renderer {
     ctx.translate(-camPx, -camPy);
 
     this.drawBackdrop(ctx, world);
-    const lights = this.drawTerrain(ctx, world);
+    const lights = this.drawTerrain(ctx, world, light);
     for (const m of state.entities.mobs) this.drawMob(ctx, m, lights);
     for (const p of state.entities.projectiles) this.drawProjectile(ctx, p);
     this.drawPlayer(ctx, player);
@@ -229,9 +299,10 @@ export class Renderer {
   }
 
   /** Draws visible blocks; returns the glowing ones for the lighting pass. */
-  drawTerrain(ctx, world) {
+  drawTerrain(ctx, world, light = 1) {
     const { x0, y0, x1, y1 } = this.viewBounds(world);
     const lights = [];
+    const night = 1 - light;
 
     for (let y = y0; y <= y1; y++) {
       for (let x = Math.max(0, x0); x <= Math.min(world.width - 1, x1); x++) {
@@ -249,13 +320,17 @@ export class Renderer {
           continue;                                     // bright blocks ignore depth shading
         }
 
+        // Depth shading underground, nightfall over everything. Taking the
+        // greater of the two keeps a shallow cave from looking brighter at
+        // midnight than the surface above it.
         const depth = y - world.ground[x];
-        if (depth > 0) {
-          const shade = Math.min(0.72, depth / 110);
-          if (shade > 0.02) {
-            ctx.fillStyle = `rgba(0,0,0,${shade})`;
-            ctx.fillRect(px, py, SCALE, SCALE);
-          }
+        const shade = Math.max(
+          depth > 0 ? Math.min(0.72, depth / 110) : 0,
+          night * 0.62,
+        );
+        if (shade > 0.02) {
+          ctx.fillStyle = `rgba(0,0,0,${shade})`;
+          ctx.fillRect(px, py, SCALE, SCALE);
         }
       }
     }

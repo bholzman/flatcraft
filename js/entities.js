@@ -465,7 +465,15 @@ export class Entities {
     const biomeId = this.biomeIdAt(world, x, floorY);
     if (!biomeId) return false;
 
-    const options = candidatesFor(biomeId, underground ? 'underground' : 'surface');
+    // After dark the open surface takes cave mobs too; in daylight nothing
+    // hostile spawns out in the open at all, which is what makes a night
+    // different from a noon rather than just darker.
+    const allowed = underground ? ['underground']
+      : (ctx.night ? ['surface', 'underground'] : ['surface']);
+    let options = candidatesFor(biomeId, allowed);
+    if (!underground && !ctx.night) {
+      options = options.filter((m) => m.behavior !== 'hostile' || m.sunProof);
+    }
     if (!options.length) return false;
 
     const def = weightedPick(options);

@@ -45,7 +45,7 @@ export const MOBS = Object.fromEntries([
   }),
   mob('rabbit', {
     name: 'Rabbit', behavior: 'passive', health: 3, size: [0.45, 0.5], shape: 'quadruped',
-    where: 'surface', biomes: ['desert', 'meadow', 'taiga'],
+    where: 'surface', biomes: ['desert', 'meadow', 'taiga', 'snowy_plains', 'snowy_taiga', 'grove'],
     palette: { body: '#b09a7a', head: '#a89272', legs: '#8e7a5e', accent: '#e8e0d0' },
     drops: [drop(I.LEATHER, 0, 1)], speed: 3.6, jump: 10, weight: 2,
   }),
@@ -63,7 +63,7 @@ export const MOBS = Object.fromEntries([
   }),
   mob('fox', {
     name: 'Fox', behavior: 'passive', health: 10, size: [0.8, 0.6], shape: 'quadruped',
-    where: 'surface', biomes: ['taiga', 'forest'],
+    where: 'surface', biomes: ['taiga', 'forest', 'snowy_taiga', 'grove'],
     palette: { body: '#d2702a', head: '#e08838', legs: '#3a2c20', accent: '#f0e0cc' },
     drops: [drop(I.LEATHER, 0, 1)], speed: 4.0, weight: 2,
   }),
@@ -81,7 +81,7 @@ export const MOBS = Object.fromEntries([
   }),
   mob('goat', {
     name: 'Goat', behavior: 'neutral', health: 10, size: [0.8, 1.2], shape: 'quadruped',
-    where: 'surface', biomes: ['meadow', 'mesa'], damage: 3,
+    where: 'surface', biomes: ['meadow', 'mesa', 'snowy_slopes', 'frozen_peaks', 'jagged_peaks'], damage: 3,
     palette: { body: '#d8d2c4', head: '#c8c0b0', legs: '#8e8678', accent: '#6a6258' },
     drops: [], speed: 3.0, jump: 13, weight: 2,
   }),
@@ -128,10 +128,34 @@ export const MOBS = Object.fromEntries([
     drops: [], speed: 3.0, weight: 2,
   }),
 
+
+  // ---------------------------------------------------------- overworld: snowy
+  mob('polar_bear', {
+    name: 'Polar Bear', behavior: 'neutral', health: 30, size: [1.3, 1.2], shape: 'quadruped',
+    where: 'surface', biomes: ['snowy_plains', 'ice_spikes', 'frozen_ocean', 'snowy_beach'],
+    damage: 6,
+    palette: { body: '#f0f2f4', head: '#f6f8fa', legs: '#d8dce2', accent: '#2a2a30' },
+    drops: [drop(I.LEATHER, 0, 2)], speed: 3.4, weight: 2,
+  }),
+  mob('stray', {
+    name: 'Stray', behavior: 'hostile', health: 20, size: [0.7, 1.9], shape: 'biped',
+    where: 'any', biomes: ['snowy_plains', 'ice_spikes', 'snowy_taiga', 'snowy_slopes', 'frozen_peaks'],
+    damage: 3,
+    ranged: { kind: 'arrow', range: 16, cooldown: 1.6, speed: 26, damage: 4 },
+    palette: { body: '#c2cfd4', head: '#d4e0e4', legs: '#9fb0b6', accent: '#5a7a84' },
+    drops: [drop(I.BONE, 0, 2), drop(I.ARROW, 0, 2)], speed: 2.8, weight: 4,
+  }),
+  mob('snow_golem', {
+    name: 'Snow Golem', behavior: 'passive', health: 4, size: [0.8, 1.9], shape: 'blob',
+    where: 'surface', biomes: ['snowy_plains', 'grove', 'snowy_taiga'],
+    palette: { body: '#f4f8fc', head: '#ffffff', legs: '#dce6ee', accent: '#e08838' },
+    drops: [drop(I.SNOWBALL, 1, 3)], speed: 2.2, weight: 1,
+  }),
+
   // ---------------------------------------------------------- overworld: neutral
   mob('wolf', {
     name: 'Wolf', behavior: 'neutral', health: 8, size: [0.8, 0.8], shape: 'quadruped',
-    where: 'surface', biomes: ['taiga', 'forest', 'dark_forest'], damage: 4,
+    where: 'surface', biomes: ['taiga', 'forest', 'dark_forest', 'snowy_taiga', 'grove'], damage: 4,
     palette: { body: '#ccc8bc', head: '#dad6ca', legs: '#a8a498', accent: '#3a3630' },
     drops: [], speed: 5.0, weight: 2,
   }),
@@ -165,13 +189,13 @@ export const MOBS = Object.fromEntries([
   }),
   mob('husk', {
     name: 'Husk', behavior: 'hostile', health: 20, size: [0.7, 1.9], shape: 'biped',
-    where: 'any', biomes: ['desert', 'mesa'], damage: 5,
+    where: 'any', biomes: ['desert', 'mesa'], damage: 5, sunProof: true,
     palette: { body: '#a8996e', head: '#b8a87e', legs: '#8a7c5a', accent: '#6a5e46' },
     drops: [drop(I.ROTTEN_FLESH, 0, 2)], speed: 2.6, weight: 3,
   }),
   mob('drowned', {
     name: 'Drowned', behavior: 'hostile', health: 20, size: [0.7, 1.9], shape: 'biped',
-    where: 'any', biomes: ['ocean', 'lake'], aquatic: true, damage: 4,
+    where: 'any', biomes: ['ocean', 'lake'], aquatic: true, damage: 4, sunProof: true,
     palette: { body: '#2e6a6a', head: '#3a7a74', legs: '#2a4a5a', accent: '#8ad8c8' },
     drops: [drop(I.ROTTEN_FLESH, 0, 2)], speed: 2.4, weight: 3,
   }),
@@ -304,10 +328,15 @@ export const MOBS = Object.fromEntries([
   }),
 ]);
 
-/** Mobs eligible for a biome, filtered by where the spawn point sits. */
-export function candidatesFor(biomeId, where) {
+/**
+ * Mobs eligible for a biome. `allowed` is the set of `where` values that fit
+ * the spawn point -- a dark surface at night accepts the same mobs a cave
+ * does, which is what makes nightfall feel different from noon.
+ */
+export function candidatesFor(biomeId, allowed) {
+  const ok = Array.isArray(allowed) ? allowed : [allowed];
   return Object.values(MOBS).filter((m) =>
-    m.biomes.includes(biomeId) && (m.where === 'any' || m.where === where));
+    m.biomes.includes(biomeId) && (m.where === 'any' || ok.includes(m.where)));
 }
 
 export const MOB_IDS = Object.keys(MOBS);

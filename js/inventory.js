@@ -122,6 +122,7 @@ export class Inventory {
     this.add(I.BOW, 1);
     this.add(I.ARROW, 16);
     this.add(I.POTION_HEALING, 2);
+    this.add(I.FLINT_AND_STEEL, 1);
     for (const id of PLACEABLE.slice(0, 4)) this.add(id, 16);
   }
 

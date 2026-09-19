@@ -86,6 +86,8 @@ const VILLAGE_PALETTES = {
   savanna: { planks: B.ACACIA_PLANKS, log: B.ACACIA_LOG, wall: B.ACACIA_PLANKS, roof: B.ACACIA_PLANKS },
   taiga:   { planks: B.SPRUCE_PLANKS, log: B.SPRUCE_LOG, wall: B.COBBLESTONE, roof: B.SPRUCE_PLANKS },
   desert:  { planks: B.SANDSTONE, log: B.CHISELED_SANDSTONE, wall: B.SANDSTONE, roof: B.SANDSTONE },
+  snowy_plains: { planks: B.SPRUCE_PLANKS, log: B.SPRUCE_LOG, wall: B.SPRUCE_PLANKS, roof: B.SNOW_BLOCK },
+  snowy_taiga:  { planks: B.SPRUCE_PLANKS, log: B.SPRUCE_LOG, wall: B.COBBLESTONE, roof: B.SNOW_BLOCK },
 };
 
 /** One village building: walls, a door, a window, a roof, sometimes furniture. */
@@ -114,7 +116,7 @@ export const STRUCTURES = {
   // ---------------------------------------------------------------- surface
   village: {
     name: 'Village', realm: 'overworld', place: 'surface',
-    biomes: ['plains', 'meadow', 'savanna', 'taiga', 'desert'],
+    biomes: ['plains', 'meadow', 'savanna', 'taiga', 'desert', 'snowy_plains', 'snowy_taiga'],
     width: 34, spacing: 430, chance: 0.8, flatness: 9,
     build(b, x, groundY, biomeId) {
       const pal = VILLAGE_PALETTES[biomeId] ?? VILLAGE_PALETTES.plains;
@@ -272,7 +274,8 @@ export const STRUCTURES = {
 
   ruined_portal: {
     name: 'Ruined Portal', realm: 'overworld', place: 'surface',
-    biomes: ['plains', 'meadow', 'forest', 'desert', 'savanna', 'taiga', 'mesa', 'swamp'],
+    biomes: ['plains', 'meadow', 'forest', 'desert', 'savanna', 'taiga', 'mesa', 'swamp',
+      'snowy_plains', 'snowy_taiga', 'grove', 'snowy_slopes'],
     width: 8, spacing: 380, chance: 0.6, flatness: 9, level: false,
     build(b, x, groundY) {
       // A portal frame with pieces missing, half-swallowed by netherrack.
@@ -288,6 +291,48 @@ export const STRUCTURES = {
       b.speckle(x - 2, groundY, x + 6, groundY + 1, B.NETHERRACK, 0.55);
       b.speckle(x - 2, groundY, x + 6, groundY, B.GOLD_ORE, 0.12);
       b.chest(x + 6, groundY - 1, 'ruined_portal');
+    },
+  },
+
+
+  igloo: {
+    name: 'Igloo', realm: 'overworld', place: 'surface',
+    biomes: ['snowy_plains', 'ice_spikes', 'snowy_taiga', 'grove', 'snowy_beach'],
+    width: 11, spacing: 380, chance: 0.75, flatness: 7,
+    build(b, x, groundY) {
+      const r = 4;
+      const cx = x + r;
+      // Snow dome: a filled half-circle hollowed out a block inside.
+      for (let dy = -r; dy <= 0; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          const d = Math.hypot(dx, dy);
+          if (d > r) continue;
+          b.set(cx + dx, groundY + dy, d > r - 1.2 ? B.SNOW_BLOCK : B.AIR);
+        }
+      }
+      b.fill(cx - r, groundY, cx + r, groundY, B.SNOW_BLOCK);   // floor
+
+      b.set(cx - r + 1, groundY - 1, B.AIR);                     // doorway
+      b.set(cx - r + 1, groundY - 2, B.AIR);
+      b.set(cx - 2, groundY - 1, B.RED_WOOL);                    // bed
+      b.set(cx - 1, groundY - 1, B.RED_WOOL);
+      b.set(cx + 2, groundY - 1, B.CRAFTING_TABLE);
+      b.set(cx + 3, groundY - 1, B.FURNACE);
+      b.set(cx, groundY - 3, B.LANTERN);
+
+      // Half of them hide a laboratory under the floor, as in Minecraft.
+      if (b.chance(0.5)) {
+        const by = groundY + 7;
+        b.room(cx - 3, by - 4, cx + 3, by, B.STONE_BRICKS, B.STONE_BRICKS);
+        b.speckle(cx - 3, by - 4, cx + 3, by, B.MOSSY_STONE_BRICKS, 0.2);
+        b.fill(cx + 1, groundY + 1, cx + 1, by - 5, B.AIR);      // ladder shaft
+        for (let y = groundY + 1; y <= by - 5; y++) b.set(cx + 1, y, B.LADDER);
+        b.chest(cx - 2, by - 1, 'igloo');
+        b.set(cx + 2, by - 1, B.CRAFTING_TABLE);
+        b.set(cx, by - 3, B.TORCH);
+      } else {
+        b.chest(cx + 1, groundY - 1, 'igloo');
+      }
     },
   },
 

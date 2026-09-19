@@ -282,6 +282,20 @@ export class HUD {
       .join('');
   }
 
+  /** Caption under the map: where you are, and how deep. */
+  renderMinimapLabel(game) {
+    if (!game.minimap.visible) return;
+    const p = game.player;
+    const biome = game.world.biomeAt(p.x, p.y + p.h / 2).name;
+    const depth = Math.round(p.y - game.world.ground[
+      Math.max(0, Math.min(game.world.width - 1, p.x | 0))]);
+    const text = `${biome}  ${p.x | 0}, ${p.y | 0}`;
+    if (text !== this.lastMapLabel) {
+      this.lastMapLabel = text;
+      document.getElementById('minimap-label').textContent = text;
+    }
+  }
+
   // ---- hover tooltip ----
 
   /**
