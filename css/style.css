@@ -216,6 +216,30 @@ html, body {
   border-top: 1px solid #2c2c36;
 }
 
+h4.section {
+  margin: 0 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #2c2c36;
+  font-size: 12px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: #d9b877;
+}
+
+h4.section:not(:first-child) { margin-top: 20px; }
+
+.count-badge {
+  display: inline-block;
+  min-width: 15px;
+  margin-left: 3px;
+  padding: 0 4px;
+  background: #3f3f4e;
+  border-radius: 7px;
+  font-size: 10px;
+  text-align: center;
+  opacity: 0.9;
+}
+
 .group { margin-bottom: 16px; }
 .group:last-child { margin-bottom: 0; }
 

@@ -119,7 +119,13 @@ export class HUD {
 
   /** Every biome in every realm, as a jump list. */
   buildBiomePanel() {
+    const body = this.biomesEl.querySelector('.body');
     const frag = document.createDocumentFragment();
+
+    const biomeHead = document.createElement('h4');
+    biomeHead.className = 'section';
+    biomeHead.textContent = 'Biomes';
+    frag.appendChild(biomeHead);
 
     for (const realm of Object.keys(LAYOUTS)) {
       const layout = LAYOUTS[realm];
@@ -150,8 +156,51 @@ export class HUD {
       frag.appendChild(group);
     }
 
-    this.biomesEl.querySelector('.body').appendChild(frag);
+    body.appendChild(frag);
+
+    // Structures are per-world, so this section is filled in each time the
+    // panel opens rather than baked once at startup.
+    const structHead = document.createElement('h4');
+    structHead.className = 'section';
+    structHead.textContent = 'Structures';
+    body.appendChild(structHead);
+
+    this.structuresEl = document.createElement('div');
+    body.appendChild(this.structuresEl);
+
     this.biomesEl.querySelector('.close').addEventListener('click', () => this.toggleBiomes(false));
+  }
+
+  /** Rebuild the structure chips from whatever the worlds actually generated. */
+  refreshStructures() {
+    const frag = document.createDocumentFragment();
+
+    for (const { realm, groups } of this.game.structureGroups()) {
+      const group = document.createElement('div');
+      group.className = 'group';
+      group.innerHTML = `<h3>${REALM_LABEL[realm]}</h3>`;
+
+      const row = document.createElement('div');
+      row.className = 'chips';
+      for (const g of groups) {
+        const btn = document.createElement('button');
+        btn.className = 'chip';
+        btn.innerHTML = g.count > 1
+          ? `${g.name} <span class="count-badge">${g.count}</span>`
+          : g.name;
+        btn.title = g.count > 1 ? 'Click again for the next one' : g.name;
+        btn.addEventListener('click', () => {
+          this.game.jumpToStructure(realm, g.id);
+          this.toggleBiomes(false);
+        });
+        row.appendChild(btn);
+      }
+      group.appendChild(row);
+      frag.appendChild(group);
+    }
+
+    this.structuresEl.innerHTML = '';
+    this.structuresEl.appendChild(frag);
   }
 
   /** Every placeable block, click to load it into the selected hotbar slot. */
@@ -178,7 +227,11 @@ export class HUD {
   toggleBiomes(force) {
     const show = force ?? this.biomesEl.classList.contains('hidden');
     this.biomesEl.classList.toggle('hidden', !show);
-    if (show) { this.togglePalette(false); this.togglePack(false); }
+    if (show) {
+      this.refreshStructures();
+      this.togglePalette(false);
+      this.togglePack(false);
+    }
   }
 
   togglePalette(force) {

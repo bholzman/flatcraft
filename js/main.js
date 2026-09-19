@@ -47,6 +47,7 @@ class Game {
     this.hover = null;           // block cell under the cursor, if in reach
     this.target = null;          // mob under the cursor, if in reach
     this.inspect = null;         // what the cursor is over, for the tooltip
+    this.structureCursor = new Map();   // realm:id -> which instance to visit next
     this.intent = { move: 0, down: false, jumpHeld: false, jumpPressed: false };
     this.placeCooldown = 0;
     this.portalDwell = 0;
@@ -329,6 +330,64 @@ class Game {
     this.travelLock = true;
     this.mining = null;
     this.hud.announce(bi?.name ?? biomeId);
+  }
+
+  /**
+   * Every structure in every realm, grouped by kind. Generating the other
+   * realms here is what makes their structures listable before you've been to
+   * them; it costs one pass and only happens when the panel is opened.
+   */
+  structureGroups() {
+    return Object.keys(REALMS).map((realm) => {
+      const world = this.getWorld(realm);
+      const groups = new Map();
+
+      for (const s of world.structures) {
+        if (!groups.has(s.id)) groups.set(s.id, { id: s.id, name: s.name, count: 0 });
+        groups.get(s.id).count += 1;
+      }
+      return { realm, groups: [...groups.values()].sort((a, b) => a.name.localeCompare(b.name)) };
+    }).filter((r) => r.groups.length);
+  }
+
+  /**
+   * Travel to a structure of the given kind. Repeated calls walk through every
+   * instance of it in turn, so a kind with seven dungeons is all reachable
+   * from one chip.
+   */
+  jumpToStructure(realm, structureId) {
+    const world = this.getWorld(realm);
+    const all = world.structures
+      .filter((s) => s.id === structureId)
+      .sort((a, b) => a.x - b.x);
+    if (!all.length) return;
+
+    const key = `${realm}:${structureId}`;
+    const next = ((this.structureCursor.get(key) ?? -1) + 1) % all.length;
+    this.structureCursor.set(key, next);
+    const target = all[next];
+
+    if (realm !== this.realm) {
+      this.realm = realm;
+      this.world = world;
+    }
+    this.entities.clear();
+
+    // A structure can be solid through -- buried treasure is a chest inside a
+    // block of sand -- so fall back to standing on the surface above it, which
+    // is where you'd start digging from anyway.
+    const cx = Math.round((target.x0 + target.x1) / 2);
+    const at = world.findClearSpot(target.x0, target.x1, target.y0, target.y1)
+      ?? world.viewpointAt(cx);
+
+    this.player.enter(world, at);
+    this.renderer.snapTo(this.player);
+    this.entities.populate(this.entityContext());
+    this.travelLock = true;
+    this.mining = null;
+    this.hud.announce(all.length > 1
+      ? `${target.name} (${next + 1} of ${all.length})`
+      : target.name);
   }
 
   depthRangeOf(world, biomeId) {

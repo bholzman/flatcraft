@@ -30,7 +30,7 @@ keep running a stale copy of an edited module until you hard-reload.
 | `I` | Backpack |
 | Hover | Tooltip naming the block, mob, or structure under the cursor |
 | `G` | Cycle survival → creative → spectator |
-| `B` | Travel to any biome (creative / spectator) |
+| `B` | Travel to any biome or structure (creative / spectator) |
 | `E` | Block palette (creative) |
 | `F3` | Debug overlay |
 
@@ -117,6 +117,13 @@ in cross-section:
 Placement walks the world in cells so structures of a kind stay apart, and
 terrain under a surface structure is levelled the way Minecraft terraforms
 under a village — including the terrain baseline the renderer shades from.
+
+In creative or spectator, `B` opens the Travel panel: every biome, plus every
+structure that generated, grouped by realm with a count. Clicking a structure
+takes you to one; clicking it again goes to the next, so all nine dungeons are
+reachable from one chip. You land somewhere you actually fit — inside the
+structure where there's room, on the surface above it when there isn't
+(buried treasure is a chest inside a block of sand).
 
 **Chests** roll a loot table the first time you right-click them (18 tables,
 one per structure) and keep whatever doesn't fit in your inventory.

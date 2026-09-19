@@ -95,6 +95,31 @@ export class World {
     this.surface[x] = this.height;
   }
 
+  /**
+   * Somewhere inside a box where the player's body fits, searching outward
+   * from the middle column. Prefers a spot with a floor under it; falls back
+   * to any non-solid gap (water counts -- you can swim, you can't be stuck in
+   * it). Returns null only if the whole box is solid.
+   */
+  findClearSpot(x0, x1, y0, y1) {
+    const mid = Math.round((x0 + x1) / 2);
+    const cols = [mid];
+    for (let d = 1; d <= Math.max(mid - x0, x1 - mid); d++) {
+      if (mid - d >= x0) cols.push(mid - d);
+      if (mid + d <= x1) cols.push(mid + d);
+    }
+
+    let floating = null;
+    for (const x of cols) {
+      for (let y = Math.max(0, y0 - 2); y <= y1 && y < this.height - 2; y++) {
+        if (isSolid(this.get(x, y)) || isSolid(this.get(x, y + 1))) continue;
+        if (isSolid(this.get(x, y + 2))) return { x: x + 0.5, y };
+        if (!floating) floating = { x: x + 0.5, y };
+      }
+    }
+    return floating;
+  }
+
   /** The structure whose footprint contains this cell, if any. */
   structureAt(x, y) {
     for (const s of this.structures) {
