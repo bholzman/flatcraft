@@ -1,7 +1,7 @@
 import { TILE, ZOOM, CAMERA_SMOOTH, LUSH_CAVES_AT, DEEP_DARK_AT } from './config.js';
 import { AIR, BLOCKS } from './blocks.js';
 import { BIOMES, bandIndexAt } from './biomes.js';
-import { textures } from './textures.js';
+import { textures, shadowMasks } from './textures.js';
 
 const SCALE = TILE * ZOOM;        // on-screen pixels per block
 const BLEND = 16;                 // must match the generator's band cross-fade
@@ -328,9 +328,12 @@ export class Renderer {
           depth > 0 ? Math.min(0.72, depth / 110) : 0,
           night * 0.62,
         );
-        if (shade > 0.02) {
-          ctx.fillStyle = `rgba(0,0,0,${shade})`;
-          ctx.fillRect(px, py, SCALE, SCALE);
+        // Shade through the block's own silhouette, so a tuft of grass darkens
+        // without the empty rest of its cell turning into a black square.
+        if (shade > 0.02 && shadowMasks[id]) {
+          ctx.globalAlpha = shade;
+          ctx.drawImage(shadowMasks[id], px, py, SCALE, SCALE);
+          ctx.globalAlpha = 1;
         }
       }
     }

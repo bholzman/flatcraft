@@ -370,9 +370,9 @@ def(DEEPSLATE_TILES, 'Deepslate Tiles', { hardness: 2.4, tint: '#35353d', style:
 
 def(SNOW_BLOCK, 'Snow Block', { hardness: 0.4, tint: '#f0f4f8' });
 def(SNOW_LAYER, 'Snow', { solid: false, hardness: 0.1, tint: '#f4f8fc', style: 'flat' });
-def(ICE, 'Ice', { hardness: 0.6, tint: '#9dc2ee', style: 'glass', slippery: true });
-def(PACKED_ICE, 'Packed Ice', { hardness: 1.0, tint: '#83abdd', slippery: true });
-def(BLUE_ICE, 'Blue Ice', { hardness: 1.4, tint: '#5f96d8', slippery: true });
+def(ICE, 'Ice', { hardness: 0.6, tint: '#bfe2fa', style: 'ice', alpha: 0.8, slippery: true });
+def(PACKED_ICE, 'Packed Ice', { hardness: 1.0, tint: '#9ecdf0', style: 'ice', alpha: 1, slippery: true });
+def(BLUE_ICE, 'Blue Ice', { hardness: 1.4, tint: '#6fb4ec', style: 'ice', alpha: 1, slippery: true });
 def(POWDER_SNOW, 'Powder Snow', { solid: false, hardness: 0.3, tint: '#e8f2fb', style: 'plain' });
 
 export const BLOCKS = R;

@@ -19,6 +19,9 @@ function hexToRgb(hex) {
 export class Minimap {
   constructor(canvas) {
     this.canvas = canvas;
+    // The frame around the canvas has to hide with it, or toggling off leaves
+    // an empty bordered box in the corner.
+    this.wrap = canvas.closest('#minimap-wrap') ?? canvas;
     this.ctx = canvas.getContext('2d');
     this.visible = true;
     this.timer = 0;
@@ -44,7 +47,7 @@ export class Minimap {
 
   toggle(force) {
     this.visible = force ?? !this.visible;
-    this.canvas.classList.toggle('hidden', !this.visible);
+    this.wrap.classList.toggle('hidden', !this.visible);
   }
 
   colourOf(id) {

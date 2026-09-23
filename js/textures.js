@@ -191,6 +191,52 @@ const PAINTERS = {
     g.globalAlpha = 1;
   },
 
+  /**
+   * Ice reads as ice through frost and fractures, not through transparency.
+   * Drawn at the `alpha` on the block definition: the glass painter's 20%
+   * left it looking like a black square anywhere the background was dark.
+   */
+  ice: (g, base, d) => {
+    const alpha = d.alpha ?? 0.78;
+
+    // Frosted body, lit from the top-left so a face has some form to it.
+    for (let y = 0; y < RES; y++) {
+      for (let x = 0; x < RES; x++) {
+        const n = noiseAt(x, y, d.id);
+        const form = 1.1 - (x + y) / (RES * 7);
+        g.fillStyle = css(shade(base, form + n * 0.14), alpha);
+        g.fillRect(x, y, 1, 1);
+      }
+    }
+
+    // Internal fractures: pale seams at shallow angles, a few per block.
+    g.lineWidth = 1;
+    for (let i = 0; i < 5; i++) {
+      const x0 = noiseAt(i, 50, d.id) * RES;
+      const y0 = noiseAt(i, 51, d.id) * RES;
+      const len = 4 + noiseAt(i, 52, d.id) * 9;
+      const dir = noiseAt(i, 53, d.id) > 0.5 ? 1 : -1;
+      g.strokeStyle = `rgba(242,251,255,${0.22 + noiseAt(i, 54, d.id) * 0.33})`;
+      g.beginPath();
+      g.moveTo(x0, y0);
+      g.lineTo(x0 + len, y0 + len * 0.5 * dir);
+      g.stroke();
+    }
+
+    // A glint, which is what actually says "ice" rather than "blue block".
+    g.fillStyle = 'rgba(255,255,255,0.62)';
+    g.fillRect(3, 2, 4, 1);
+    g.fillRect(3, 3, 2, 1);
+    g.fillStyle = 'rgba(255,255,255,0.3)';
+    g.fillRect(RES - 6, RES - 5, 3, 1);
+
+    // Lit top edge, shaded bottom, so stacked ice still shows its courses.
+    g.fillStyle = 'rgba(255,255,255,0.42)';
+    g.fillRect(0, 0, RES, 1);
+    g.fillStyle = 'rgba(28,58,104,0.34)';
+    g.fillRect(0, RES - 1, RES, 1);
+  },
+
   liquid: (g, base, d) => {
     g.fillStyle = css(base, d.emit > 0.5 ? 0.92 : 0.55);
     g.fillRect(0, 0, RES, RES);
@@ -535,12 +581,26 @@ const ITEM_PAINTERS = {
 
 export const textures = {};
 
+// A black silhouette of each texture, carrying its alpha. Shading by filling
+// the whole cell with black paints the transparent parts of a plant or a torch
+// too, which shows up as a black square behind it at night.
+export const shadowMasks = {};
+
 function bakeInto(id, painter, tint, def) {
   const c = document.createElement('canvas');
   c.width = c.height = RES;
   const g = c.getContext('2d');
   painter(g, hexToRgb(tint), def);
   textures[id] = c;
+
+  const mask = document.createElement('canvas');
+  mask.width = mask.height = RES;
+  const mg = mask.getContext('2d');
+  mg.drawImage(c, 0, 0);
+  mg.globalCompositeOperation = 'source-in';   // keep this texture's alpha
+  mg.fillStyle = '#000';
+  mg.fillRect(0, 0, RES, RES);
+  shadowMasks[id] = mask;
 }
 
 export function bakeAll() {

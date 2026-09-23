@@ -185,10 +185,7 @@ class Game {
 
     if (input.consumePress('KeyG')) this.cycleMode();
     if (input.consumePress('F3')) this.hud.toggleDebug();
-    if (input.consumePress('KeyM')) {
-      this.minimap.toggle();
-      document.getElementById('minimap-wrap').classList.toggle('hidden', !this.minimap.visible);
-    }
+    if (input.consumePress('KeyM')) this.minimap.toggle();
     // Travel is for exploring, so spectators get it too; the block palette is
     // only useful to someone who can actually place a block.
     if (this.mode !== 'survival' && input.consumePress('KeyB')) this.hud.toggleBiomes();
