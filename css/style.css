@@ -260,6 +260,41 @@ h4.section {
 
 h4.section:not(:first-child) { margin-top: 20px; }
 
+.time-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 9px;
+}
+
+.time-row input[type="range"] {
+  flex: 1;
+  min-width: 120px;
+  accent-color: #d9b877;
+}
+
+.time-hold {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  opacity: 0.7;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.time-hold input { accent-color: #d9b877; cursor: pointer; }
+
+.time-readout {
+  min-width: 152px;
+  font-size: 11px;
+  text-align: right;
+  color: #d9b877;
+  white-space: nowrap;
+}
+
 .count-badge {
   display: inline-block;
   min-width: 15px;

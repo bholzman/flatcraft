@@ -31,7 +31,7 @@ keep running a stale copy of an edited module until you hard-reload.
 | `M` | Toggle the map overlay |
 | Hover | Tooltip naming the block, mob, or structure under the cursor |
 | `G` | Cycle survival → creative → spectator |
-| `B` | Travel to any biome or structure (creative / spectator) |
+| `B` | Travel to any biome or structure, set the time (creative / spectator) |
 | `E` | Block palette (creative) |
 | `F3` | Debug overlay |
 
@@ -50,7 +50,9 @@ Only survival takes damage; creative and spectator are invulnerable.
 ## Day and night
 
 A full cycle runs ten minutes: sunrise, day, sunset, night, with a sun, a moon
-and stars crossing the sky. It is not just a tint — **nothing hostile spawns
+and stars crossing the sky. The Travel panel (`B`, creative or spectator) sets
+it: seven named phases, a slider for anything between, a **Hold** that stops
+the clock where you put it, and a live readout. It is not just a tint — **nothing hostile spawns
 on the open surface in daylight**, and after dark the surface accepts the same
 mobs a cave does. Caves stay dangerous around the clock, and the Nether and
 End have no cycle at all.

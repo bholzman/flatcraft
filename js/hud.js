@@ -1,6 +1,7 @@
 import { AIR, PLACEABLE, block, isLiquid, isDecoration } from './blocks.js';
 import * as I from './items.js';
 import { BIOMES, LAYOUTS } from './biomes.js';
+import { phaseName, clockAt } from './config.js';
 import { swatchDataURL } from './textures.js';
 import { HOTBAR_SIZE, STORAGE_SIZE } from './inventory.js';
 
@@ -120,6 +121,9 @@ export class HUD {
   /** Every biome in every realm, as a jump list. */
   buildBiomePanel() {
     const body = this.biomesEl.querySelector('.body');
+
+    this.buildTimePanel(body);
+
     const frag = document.createDocumentFragment();
 
     const biomeHead = document.createElement('h4');
@@ -169,6 +173,87 @@ export class HUD {
     body.appendChild(this.structuresEl);
 
     this.biomesEl.querySelector('.close').addEventListener('click', () => this.toggleBiomes(false));
+  }
+
+  /**
+   * Time of day: named phases for the usual ones, a slider for anything in
+   * between, and a hold so a time you set doesn't drift while you look at it.
+   */
+  buildTimePanel(body) {
+    const head = document.createElement('h4');
+    head.className = 'section';
+    head.textContent = 'Time of day';
+    body.appendChild(head);
+
+    const group = document.createElement('div');
+    group.className = 'group';
+
+    const row = document.createElement('div');
+    row.className = 'chips';
+    const PHASES = [
+      ['Sunrise', 0.02], ['Morning', 0.14], ['Noon', 0.25], ['Afternoon', 0.36],
+      ['Sunset', 0.48], ['Night', 0.6], ['Midnight', 0.75],
+    ];
+    for (const [label, phase] of PHASES) {
+      const btn = document.createElement('button');
+      btn.className = 'chip';
+      btn.textContent = label;
+      // Stays open: setting a time is something you tend to do a few times.
+      btn.addEventListener('click', () => this.game.setTimeOfDay(phase));
+      row.appendChild(btn);
+    }
+    group.appendChild(row);
+
+    const controls = document.createElement('div');
+    controls.className = 'time-row';
+
+    this.timeSlider = document.createElement('input');
+    this.timeSlider.type = 'range';
+    this.timeSlider.min = '0';
+    this.timeSlider.max = '1000';
+    this.timeSlider.step = '1';
+    this.timeSlider.addEventListener('input', () => {
+      this.game.setTimeOfDay(Number(this.timeSlider.value) / 1000);
+    });
+
+    const hold = document.createElement('label');
+    hold.className = 'time-hold';
+    this.timeHold = document.createElement('input');
+    this.timeHold.type = 'checkbox';
+    this.timeHold.addEventListener('change', () => {
+      this.game.timeFrozen = this.timeHold.checked;
+    });
+    hold.appendChild(this.timeHold);
+    hold.appendChild(document.createTextNode('Hold'));
+
+    this.timeReadout = document.createElement('span');
+    this.timeReadout.className = 'time-readout';
+
+    controls.appendChild(this.timeSlider);
+    controls.appendChild(hold);
+    controls.appendChild(this.timeReadout);
+    group.appendChild(controls);
+    body.appendChild(group);
+  }
+
+  /** Keep the slider and caption in step with a clock that is still running. */
+  refreshTime(game) {
+    if (!this.timeSlider || this.biomesEl.classList.contains('hidden')) return;
+
+    const phase = game.timeOfDay;
+    if (document.activeElement !== this.timeSlider) {
+      this.timeSlider.value = String(Math.round(phase * 1000));
+    }
+    this.timeHold.checked = !!game.timeFrozen;
+
+    const hours = clockAt(phase);
+    const text = `${phaseName(phase)} · ${String(Math.floor(hours)).padStart(2, '0')}:`
+      + `${String(Math.floor((hours % 1) * 60)).padStart(2, '0')}`
+      + `${game.realm === 'overworld' ? '' : ' · no sky here'}`;
+    if (text !== this.lastTimeText) {
+      this.lastTimeText = text;
+      this.timeReadout.textContent = text;
+    }
   }
 
   /** Rebuild the structure chips from whatever the worlds actually generated. */
@@ -229,6 +314,7 @@ export class HUD {
     this.biomesEl.classList.toggle('hidden', !show);
     if (show) {
       this.refreshStructures();
+      this.refreshTime(this.game);
       this.togglePalette(false);
       this.togglePack(false);
     }

@@ -1,6 +1,6 @@
 import {
   FIXED_DT, MAX_FRAME_DT, REACH, CREATIVE_REACH, REALMS, START_REALM, PORTAL_DWELL,
-  PORTAL_LINK_RANGE, DAY_LENGTH, START_PHASE, dayLightAt, phaseName,
+  PORTAL_LINK_RANGE, DAY_LENGTH, START_PHASE, dayLightAt, phaseName, clockAt,
 } from './config.js';
 import {
   AIR, CHEST, GRAVEL, OBSIDIAN, NETHER_PORTAL, END_PORTAL, block, isBreakable, isSolid, dropOf,
@@ -53,6 +53,7 @@ class Game {
     this.inspect = null;         // what the cursor is over, for the tooltip
     this.structureCursor = new Map();   // realm:id -> which instance to visit next
     this.worldTime = START_PHASE * DAY_LENGTH;   // seconds into the current day
+    this.timeFrozen = false;                     // hold the clock where it is
     this.intent = { move: 0, down: false, jumpHeld: false, jumpPressed: false };
     this.placeCooldown = 0;
     this.portalDwell = 0;
@@ -76,6 +77,14 @@ class Game {
   /** Sky light, 0 at night to 1 in full day. Other realms are always lit. */
   get dayLight() {
     return this.realm === 'overworld' ? dayLightAt(this.timeOfDay) : 1;
+  }
+
+  /** Jump the clock to a phase: 0 sunrise, 0.25 noon, 0.5 sunset, 0.75 midnight. */
+  setTimeOfDay(phase) {
+    this.worldTime = (((phase % 1) + 1) % 1) * DAY_LENGTH;
+    // Resample immediately so the map doesn't lag a quarter second behind.
+    this.minimap.timer = 0;
+    this.hud.refreshTime(this);
   }
 
   /** Dark enough for hostile mobs to spawn out in the open. */
@@ -120,6 +129,7 @@ class Game {
     this.renderer.draw(this);
     this.minimap.update(dt, this);
     this.hud.renderMinimapLabel(this);
+    this.hud.refreshTime(this);
     this.hud.renderTooltip(this.inspect);
     this.hud.renderHealth(this.player, this.mode === 'survival');
     this.hud.renderEffects(this.player);
@@ -130,7 +140,7 @@ class Game {
   }
 
   step(dt) {
-    this.worldTime = (this.worldTime + dt) % DAY_LENGTH;
+    if (!this.timeFrozen) this.worldTime = (this.worldTime + dt) % DAY_LENGTH;
     this.player.update(dt, this.intent);
     this.intent.jumpPressed = false;      // a buffered jump only fires once
     this.placeCooldown = Math.max(0, this.placeCooldown - dt);
@@ -841,7 +851,7 @@ class Game {
       `fps      ${this.fps.toFixed(0)}`,
       `realm    ${this.realm}  [${this.mode}]`,
       `biome    ${biome.name}`,
-      `time     ${phaseName(this.timeOfDay)} (${(this.timeOfDay * 24).toFixed(1)}h, light ${this.dayLight.toFixed(2)})`,
+      `time     ${phaseName(this.timeOfDay)} ${clockAt(this.timeOfDay).toFixed(1)}h, light ${this.dayLight.toFixed(2)}`,
       `pos      ${p.x.toFixed(1)}, ${p.y.toFixed(1)}`,
       `depth    ${(p.y - this.world.ground[Math.max(0, Math.min(this.world.width - 1, p.x | 0))]).toFixed(0)}`,
       `ground   ${p.onGround}${p.inLiquid ? ' (in liquid)' : ''}`,

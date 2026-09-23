@@ -28,6 +28,15 @@ export function dayLightAt(phase) {
   return (t - 0.96) / 0.04;                          // pre-dawn
 }
 
+/**
+ * Phase as a 24-hour clock. Phase 0 is sunrise, which is 06:00 -- multiplying
+ * the phase by 24 directly would put noon at 06:00.
+ */
+export function clockAt(phase) {
+  const h = (((phase % 1) + 1) % 1) * 24 + 6;
+  return h % 24;
+}
+
 /** Name of the current phase, for the readouts. */
 export function phaseName(phase) {
   const t = ((phase % 1) + 1) % 1;
