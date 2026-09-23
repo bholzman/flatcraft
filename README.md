@@ -27,6 +27,7 @@ keep running a stale copy of an edited module until you hard-reload.
 | `1`–`9` / scroll | Select hotbar slot |
 | Left click | Mine, or **attack** the mob under the cursor |
 | Right click *(or Ctrl-click)* | Place, open a chest, **draw the bow**, or **drink/throw a potion** |
+| `C` | Crafting |
 | `I` | Backpack |
 | `M` | Toggle the map overlay |
 | Hover | Tooltip naming the block, mob, or structure under the cursor |
@@ -46,6 +47,23 @@ Stand in a portal for a moment to change realm.
 | Spectator | Fly through blocks | Look only — no mining, placing or targeting |
 
 Only survival takes damage; creative and spectator are invulnerable.
+
+## Crafting
+
+`C` opens the recipe book: 70 recipes across wood, building, snow, light,
+combat, brewing and smelting. Each row shows what it makes, what it needs with
+have/need counts, and why it isn't available yet. **Craft** makes one, **x8**
+makes a batch, and a filter hides everything you can't currently make.
+
+Minecraft's constraints are kept even though the placement grid isn't: small
+recipes work anywhere, bigger ones need a **crafting table** within four
+blocks, and smelting needs a **furnace**. Furnaces hold a burn buffer — a coal
+is worth eight smelts and the remainder stays in that furnace. It's a recipe
+book rather than a 3x3 grid because drag-and-drop into a grid doesn't survive
+contact with a browser and one mouse button.
+
+Ores now drop their material, so the chain works: coal ore gives coal, iron
+ore smelts to an ingot, and log → planks → sticks → sword runs end to end.
 
 ## Day and night
 
@@ -168,10 +186,11 @@ js/physics.js    shared AABB sweep used by the player and every mob
 js/structures.js structure registry, cross-section builders, placement
 js/loot.js       per-structure chest loot tables
 js/minimap.js    corner map overlay
+js/recipes.js    crafting and smelting recipes, fuel values
 ```
 
 ## Not built yet
 
-Crafting, tool tiers, hunger, world save/load, chunked streaming, sound,
+Tool tiers, hunger, world save/load, chunked streaming, sound,
 breeding/taming. The Ender Dragon exists and fights, but has no boss mechanics
 — no perches, healing crystals, or end-of-fight sequence.

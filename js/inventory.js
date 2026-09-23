@@ -81,6 +81,18 @@ export class Inventory {
     return true;
   }
 
+  /** Is there room for `count` of `id` without dropping any? */
+  fits(id, count) {
+    const max = I.stackSize(id);
+    let room = 0;
+    for (const s of this.everySlot) {
+      if (s.count === 0) room += max;
+      else if (s.id === id) room += Math.max(0, max - s.count);
+      if (room >= count) return true;
+    }
+    return false;
+  }
+
   total(id) {
     return this.everySlot.reduce((n, s) => n + (s.id === id ? s.count : 0), 0);
   }

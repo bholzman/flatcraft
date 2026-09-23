@@ -2,6 +2,7 @@ import { AIR, PLACEABLE, block, isLiquid, isDecoration } from './blocks.js';
 import * as I from './items.js';
 import { BIOMES, LAYOUTS } from './biomes.js';
 import { phaseName, clockAt } from './config.js';
+import { RECIPES, CATEGORIES } from './recipes.js';
 import { swatchDataURL } from './textures.js';
 import { HOTBAR_SIZE, STORAGE_SIZE } from './inventory.js';
 
@@ -22,6 +23,7 @@ export class HUD {
     this.paletteEl = document.getElementById('palette');
     this.packEl = document.getElementById('pack');
     this.tipEl = document.getElementById('tooltip');
+    this.craftEl = document.getElementById('crafting');
     this.toastTimer = null;
     this.showDebug = false;
     this.debugEl.classList.add('hidden');
@@ -30,6 +32,7 @@ export class HUD {
     this.buildPack();
     this.buildBiomePanel();
     this.buildPalette();
+    this.buildCrafting();
 
     this.inventory.onChange = () => { this.renderHotbar(); this.renderPack(); };
     this.renderHotbar();
@@ -113,7 +116,135 @@ export class HUD {
   togglePack(force) {
     const show = force ?? this.packEl.classList.contains('hidden');
     this.packEl.classList.toggle('hidden', !show);
-    if (show) { this.toggleBiomes(false); this.togglePalette(false); }
+    if (show) { this.toggleBiomes(false); this.togglePalette(false); this.toggleCrafting(false); }
+  }
+
+  // ---- crafting ----
+
+  /**
+   * A recipe book rather than a placement grid: every recipe is listed with
+   * what it needs and what it makes, and the ones you can actually make right
+   * now are live. Drag-and-drop into a 3x3 grid doesn't survive contact with
+   * a browser and a single mouse button.
+   */
+  buildCrafting() {
+    const body = this.craftEl.querySelector('.body');
+
+    const bar = document.createElement('div');
+    bar.className = 'craft-bar';
+    this.craftOnly = document.createElement('input');
+    this.craftOnly.type = 'checkbox';
+    this.craftOnly.checked = false;
+    this.craftOnly.addEventListener('change', () => this.refreshCrafting(this.game));
+    const onlyLabel = document.createElement('label');
+    onlyLabel.className = 'time-hold';
+    onlyLabel.appendChild(this.craftOnly);
+    onlyLabel.appendChild(document.createTextNode('Only what I can make'));
+    this.craftStations = document.createElement('span');
+    this.craftStations.className = 'craft-stations';
+    bar.appendChild(onlyLabel);
+    bar.appendChild(this.craftStations);
+    body.appendChild(bar);
+
+    this.craftList = document.createElement('div');
+    body.appendChild(this.craftList);
+
+    this.craftRows = RECIPES.map((r) => {
+      const row = document.createElement('div');
+      row.className = 'craft-row';
+
+      const result = document.createElement('div');
+      result.className = 'craft-result';
+      result.innerHTML = `<img src="${swatchDataURL(r.out.id)}" alt="">`
+        + `<span class="craft-name">${I.nameOf(r.out.id)}`
+        + `${r.out.count > 1 ? ` <b>x${r.out.count}</b>` : ''}</span>`;
+
+      const needs = document.createElement('div');
+      needs.className = 'craft-needs';
+
+      const actions = document.createElement('div');
+      actions.className = 'craft-actions';
+      const one = document.createElement('button');
+      one.className = 'chip craft-btn';
+      one.textContent = 'Craft';
+      one.addEventListener('click', () => this.game.craft(r, 1));
+      const many = document.createElement('button');
+      many.className = 'chip craft-btn';
+      many.textContent = 'x8';
+      many.addEventListener('click', () => this.game.craft(r, 8));
+      actions.appendChild(one);
+      actions.appendChild(many);
+
+      row.appendChild(result);
+      row.appendChild(needs);
+      row.appendChild(actions);
+      return { recipe: r, row, needs, one, many };
+    });
+
+    for (const cat of CATEGORIES) {
+      const head = document.createElement('h4');
+      head.className = 'section';
+      head.textContent = cat;
+      head.dataset.cat = cat;
+      this.craftList.appendChild(head);
+      for (const entry of this.craftRows) {
+        if (entry.recipe.category === cat) this.craftList.appendChild(entry.row);
+      }
+    }
+
+    this.craftEl.querySelector('.close').addEventListener('click', () => this.toggleCrafting(false));
+  }
+
+  refreshCrafting(game) {
+    if (!this.craftRows || this.craftEl.classList.contains('hidden')) return;
+
+    const stations = game.stationsNearby();
+    const onlyReady = this.craftOnly.checked;
+    this.craftStations.textContent = [
+      stations.table ? 'crafting table ✓' : 'no crafting table',
+      stations.furnace ? 'furnace ✓' : 'no furnace',
+    ].join(' · ');
+
+    const shown = new Set();
+    for (const entry of this.craftRows) {
+      const blockers = game.recipeBlockers(entry.recipe, stations);
+      const ready = blockers.length === 0;
+      const hide = onlyReady && !ready;
+
+      entry.row.classList.toggle('hidden', hide);
+      entry.row.classList.toggle('ready', ready);
+      entry.one.disabled = !ready;
+      entry.many.disabled = !ready;
+      entry.one.title = blockers.join(', ') || 'Craft one';
+      if (!hide) shown.add(entry.recipe.category);
+
+      // Ingredient chips carry have/need, so a shortfall is obvious.
+      const html = entry.recipe.in.map((ing) => {
+        const have = game.inventory.total(ing.id);
+        const ok = game.creative || have >= ing.count;
+        return `<span class="ing ${ok ? '' : 'short'}" title="${I.nameOf(ing.id)}">`
+          + `<img src="${swatchDataURL(ing.id)}" alt="">`
+          + `${have}/${ing.count}</span>`;
+      }).join('');
+      const note = blockers.find((b) => b.startsWith('needs')) ?? '';
+      entry.needs.innerHTML = html + (note ? `<span class="craft-note">${note}</span>` : '');
+    }
+
+    // Hide a category heading when the filter emptied it.
+    for (const head of this.craftList.querySelectorAll('h4.section')) {
+      head.classList.toggle('hidden', !shown.has(head.dataset.cat));
+    }
+  }
+
+  toggleCrafting(force) {
+    const show = force ?? this.craftEl.classList.contains('hidden');
+    this.craftEl.classList.toggle('hidden', !show);
+    if (show) {
+      this.toggleBiomes(false);
+      this.togglePalette(false);
+      this.togglePack(false);
+      this.refreshCrafting(this.game);
+    }
   }
 
   // ---- creative panels ----
@@ -313,6 +444,7 @@ export class HUD {
     const show = force ?? this.biomesEl.classList.contains('hidden');
     this.biomesEl.classList.toggle('hidden', !show);
     if (show) {
+      this.toggleCrafting(false);
       this.refreshStructures();
       this.refreshTime(this.game);
       this.togglePalette(false);
@@ -329,7 +461,8 @@ export class HUD {
   anyPanelOpen() {
     return !this.biomesEl.classList.contains('hidden')
       || !this.paletteEl.classList.contains('hidden')
-      || !this.packEl.classList.contains('hidden');
+      || !this.packEl.classList.contains('hidden')
+      || !this.craftEl.classList.contains('hidden');
   }
 
   // ---- health & effects ----

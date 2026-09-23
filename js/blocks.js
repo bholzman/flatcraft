@@ -4,7 +4,8 @@
 // Fields:
 //   solid    - blocks player movement
 //   hardness - seconds of mining at strength 1 (null = unbreakable)
-//   drops    - block id added to the inventory when mined (defaults to itself)
+//   drops    - id added to the inventory when mined (block or item; defaults
+//              to itself). Ores drop their material, not the ore block.
 //   tint     - base colour; textures.js paints per-pixel variation on top
 //   style    - how textures.js draws it (see that file's painters)
 //   liquid   - swims through it instead of standing on it
@@ -191,6 +192,7 @@ export const ICE = 146;
 export const PACKED_ICE = 147;
 export const BLUE_ICE = 148;
 export const POWDER_SNOW = 149;
+export const MANGROVE_PLANKS = 150;
 
 const R = {};   // id -> definition
 
@@ -227,14 +229,14 @@ def(WATER, 'Water', { solid: false, hardness: null, tint: '#3b6fd4', style: 'liq
 def(GLASS, 'Glass', { hardness: 0.4, tint: '#bcd8e4', style: 'glass' });
 def(OAK_PLANKS, 'Oak Planks', { hardness: 0.9, tint: '#a97b46', style: 'planks' });
 
-def(COAL_ORE, 'Coal Ore', { hardness: 2.2, tint: '#7f7f86', style: 'ore', speckle: '#1e1e22' });
+def(COAL_ORE, 'Coal Ore', { hardness: 2.2, tint: '#7f7f86', style: 'ore', speckle: '#1e1e22', drops: 311 });
 def(IRON_ORE, 'Iron Ore', { hardness: 2.8, tint: '#7f7f86', style: 'ore', speckle: '#c69a7b' });
 def(COPPER_ORE, 'Copper Ore', { hardness: 2.6, tint: '#7f7f86', style: 'ore', speckle: '#d98149' });
 def(GOLD_ORE, 'Gold Ore', { hardness: 3.2, tint: '#7f7f86', style: 'ore', speckle: '#e9c34a' });
-def(REDSTONE_ORE, 'Redstone Ore', { hardness: 3.0, tint: '#7f7f86', style: 'ore', speckle: '#d33b32', emit: 0.2 });
-def(LAPIS_ORE, 'Lapis Ore', { hardness: 3.0, tint: '#7f7f86', style: 'ore', speckle: '#2a51b8' });
-def(DIAMOND_ORE, 'Diamond Ore', { hardness: 4.0, tint: '#7f7f86', style: 'ore', speckle: '#5fe3dc' });
-def(EMERALD_ORE, 'Emerald Ore', { hardness: 4.0, tint: '#7f7f86', style: 'ore', speckle: '#36cd47' });
+def(REDSTONE_ORE, 'Redstone Ore', { hardness: 3.0, tint: '#7f7f86', style: 'ore', speckle: '#d33b32', emit: 0.2, drops: 318 });
+def(LAPIS_ORE, 'Lapis Ore', { hardness: 3.0, tint: '#7f7f86', style: 'ore', speckle: '#2a51b8', drops: 317 });
+def(DIAMOND_ORE, 'Diamond Ore', { hardness: 4.0, tint: '#7f7f86', style: 'ore', speckle: '#5fe3dc', drops: 315 });
+def(EMERALD_ORE, 'Emerald Ore', { hardness: 4.0, tint: '#7f7f86', style: 'ore', speckle: '#36cd47', drops: 316 });
 
 def(CACTUS, 'Cactus', { solid: false, hardness: 0.4, tint: '#4f8f4a', style: 'column' });
 def(DEAD_BUSH, 'Dead Bush', { solid: false, hardness: 0.1, tint: '#9a7a42', style: 'plant' });
@@ -295,8 +297,8 @@ def(BASALT, 'Basalt', { hardness: 1.5, tint: '#4a4a52', style: 'log' });
 def(BLACKSTONE, 'Blackstone', { hardness: 1.6, tint: '#2c262f', style: 'cobble' });
 def(MAGMA_BLOCK, 'Magma Block', { hardness: 0.8, tint: '#8e3a1c', style: 'magma', emit: 0.5 });
 def(GLOWSTONE, 'Glowstone', { hardness: 0.5, tint: '#e6ca5a', style: 'glow', emit: 1 });
-def(QUARTZ_ORE, 'Nether Quartz Ore', { hardness: 1.6, tint: '#6e3436', style: 'ore', speckle: '#e8e2dc', host: NETHERRACK });
-def(NETHER_GOLD_ORE, 'Nether Gold Ore', { hardness: 1.6, tint: '#6e3436', style: 'ore', speckle: '#e9c34a', host: NETHERRACK });
+def(QUARTZ_ORE, 'Nether Quartz Ore', { hardness: 1.6, tint: '#6e3436', style: 'ore', speckle: '#e8e2dc', host: NETHERRACK, drops: 319 });
+def(NETHER_GOLD_ORE, 'Nether Gold Ore', { hardness: 1.6, tint: '#6e3436', style: 'ore', speckle: '#e9c34a', host: NETHERRACK, drops: 313 });
 def(LAVA, 'Lava', { solid: false, hardness: null, tint: '#e2611c', style: 'liquid', liquid: true, emit: 0.9 });
 def(CRIMSON_NYLIUM, 'Crimson Nylium', { hardness: 0.8, tint: '#8d1f1f', style: 'grass', soil: NETHERRACK, drops: NETHERRACK });
 def(CRIMSON_STEM, 'Crimson Stem', { hardness: 1.2, tint: '#6a344a', style: 'log' });
@@ -374,6 +376,7 @@ def(ICE, 'Ice', { hardness: 0.6, tint: '#bfe2fa', style: 'ice', alpha: 0.8, slip
 def(PACKED_ICE, 'Packed Ice', { hardness: 1.0, tint: '#9ecdf0', style: 'ice', alpha: 1, slippery: true });
 def(BLUE_ICE, 'Blue Ice', { hardness: 1.4, tint: '#6fb4ec', style: 'ice', alpha: 1, slippery: true });
 def(POWDER_SNOW, 'Powder Snow', { solid: false, hardness: 0.3, tint: '#e8f2fb', style: 'plain' });
+def(MANGROVE_PLANKS, 'Mangrove Planks', { hardness: 0.9, tint: '#8a4a42', style: 'planks' });
 
 export const BLOCKS = R;
 

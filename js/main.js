@@ -3,7 +3,8 @@ import {
   PORTAL_LINK_RANGE, DAY_LENGTH, START_PHASE, dayLightAt, phaseName, clockAt,
 } from './config.js';
 import {
-  AIR, CHEST, GRAVEL, OBSIDIAN, NETHER_PORTAL, END_PORTAL, block, isBreakable, isSolid, dropOf,
+  AIR, CHEST, CRAFTING_TABLE, FURNACE, GRAVEL, OBSIDIAN, NETHER_PORTAL, END_PORTAL,
+  block, isBreakable, isSolid, dropOf,
 } from './blocks.js';
 import { rollLoot } from './loot.js';
 import { World } from './world.js';
@@ -17,6 +18,7 @@ import { BIOMES } from './biomes.js';
 import { Entities, Projectile, ballisticVelocity } from './entities.js';
 import { portalOnSurface } from './worldgen.js';
 import { Minimap } from './minimap.js';
+import { RECIPES, fuelValue } from './recipes.js';
 import * as I from './items.js';
 
 const PORTAL_IDS = new Set([NETHER_PORTAL, END_PORTAL]);
@@ -191,10 +193,12 @@ class Game {
     if (this.mode !== 'survival' && input.consumePress('KeyB')) this.hud.toggleBiomes();
     if (this.creative && input.consumePress('KeyE')) this.hud.togglePalette();
     if (input.consumePress('KeyI')) this.hud.togglePack();
+    if (input.consumePress('KeyC')) this.hud.toggleCrafting();
     if (input.consumePress('Escape')) {
       this.hud.toggleBiomes(false);
       this.hud.togglePalette(false);
       this.hud.togglePack(false);
+      this.hud.toggleCrafting(false);
     }
 
     // While a creative panel is open the world shouldn't react to input.
@@ -515,6 +519,109 @@ class Game {
     this.travelLock = true;
     this.mining = null;
     this.hud.announce(`Entered ${realm === 'end' ? 'The End' : realm[0].toUpperCase() + realm.slice(1)}`);
+  }
+
+  // ---- crafting ----
+
+  /**
+   * Which crafting stations are in reach. A 2x2 recipe needs nothing; a 3x3
+   * needs a crafting table; smelting needs a furnace, as in Minecraft.
+   */
+  stationsNearby() {
+    const reach = 4;
+    const p = this.player;
+    const found = { table: false, furnace: null };
+
+    for (let y = Math.floor(p.y - reach); y <= Math.floor(p.y + p.h + reach); y++) {
+      for (let x = Math.floor(p.x - reach); x <= Math.floor(p.x + reach); x++) {
+        const id = this.world.get(x, y);
+        if (id === CRAFTING_TABLE) found.table = true;
+        else if (id === FURNACE && !found.furnace) found.furnace = { x, y };
+      }
+    }
+    return found;
+  }
+
+  /** Everything blocking a recipe right now, or an empty list if it's ready. */
+  recipeBlockers(recipe, stations = this.stationsNearby()) {
+    const out = [];
+    if (recipe.station === 'furnace' && !stations.furnace) out.push('needs a furnace');
+    if (recipe.grid === 3 && !stations.table && recipe.station !== 'furnace') {
+      out.push('needs a crafting table');
+    }
+    if (!this.creative) {
+      for (const ing of recipe.in) {
+        if (this.inventory.total(ing.id) < ing.count) {
+          out.push('missing materials');
+          break;
+        }
+      }
+    }
+    if (recipe.station === 'furnace' && stations.furnace && !this.furnaceHasFuel(stations.furnace)) {
+      out.push('needs fuel');
+    }
+    if (!this.inventory.fits(recipe.out.id, recipe.out.count)) out.push('inventory full');
+    return out;
+  }
+
+  canCraft(recipe, stations) {
+    return this.recipeBlockers(recipe, stations).length === 0;
+  }
+
+  /** A furnace keeps a burn buffer, topped up from fuel in the inventory. */
+  furnaceData(at) {
+    let data = this.world.dataAt(at.x, at.y);
+    if (!data || data.kind !== 'furnace') {
+      data = { kind: 'furnace', fuel: 0 };
+      this.world.setData(at.x, at.y, data);
+    }
+    return data;
+  }
+
+  furnaceHasFuel(at) {
+    if (this.creative) return true;
+    if (this.furnaceData(at).fuel >= 1) return true;
+    return this.inventory.everySlot.some((s) => s.count > 0 && fuelValue(s.id) > 0);
+  }
+
+  /** Burn one unit, lighting a fresh piece of fuel if the buffer has run out. */
+  consumeFuel(at) {
+    if (this.creative) return true;
+    const data = this.furnaceData(at);
+
+    if (data.fuel < 1) {
+      const slot = this.inventory.everySlot
+        .filter((s) => s.count > 0 && fuelValue(s.id) > 0)
+        .sort((a, b) => fuelValue(a.id) - fuelValue(b.id))[0];   // cheapest first
+      if (!slot) return false;
+      data.fuel += fuelValue(slot.id);
+      this.inventory.remove(slot.id, 1);
+    }
+    data.fuel -= 1;
+    return true;
+  }
+
+  /** Craft `times` batches, stopping as soon as one can't be made. */
+  craft(recipe, times = 1) {
+    const stations = this.stationsNearby();
+    let made = 0;
+
+    for (let i = 0; i < times; i++) {
+      if (!this.canCraft(recipe, stations)) break;
+      if (recipe.station === 'furnace' && !this.consumeFuel(stations.furnace)) break;
+
+      if (!this.creative) {
+        for (const ing of recipe.in) this.inventory.remove(ing.id, ing.count);
+      }
+      this.inventory.add(recipe.out.id, recipe.out.count);
+      made++;
+    }
+
+    if (made > 0) {
+      this.hud.announce(`${I.nameOf(recipe.out.id)} x${made * recipe.out.count}`);
+      this.hud.refreshCrafting(this);
+    }
+    return made;
   }
 
   // ---- combat ----

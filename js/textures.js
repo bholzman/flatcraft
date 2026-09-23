@@ -569,6 +569,53 @@ const ITEM_PAINTERS = {
     g.fillRect(8, 8, 1, 1);
   },
 
+  stick: (g, base) => {
+    g.strokeStyle = css(base);
+    g.lineWidth = 2;
+    g.beginPath(); g.moveTo(4, 12); g.lineTo(12, 4); g.stroke();
+    g.strokeStyle = css(shade(base, 0.7), 0.8);
+    g.lineWidth = 1;
+    g.beginPath(); g.moveTo(5, 12); g.lineTo(12, 5); g.stroke();
+  },
+
+  ingot: (g, base) => {
+    g.fillStyle = css(shade(base, 0.72));
+    g.beginPath();
+    g.moveTo(2, 11); g.lineTo(14, 11); g.lineTo(12, 14); g.lineTo(4, 14);
+    g.closePath(); g.fill();
+    g.fillStyle = css(base);
+    g.beginPath();
+    g.moveTo(3, 6); g.lineTo(13, 6); g.lineTo(14, 11); g.lineTo(2, 11);
+    g.closePath(); g.fill();
+    g.fillStyle = css(shade(base, 1.3), 0.85);
+    g.fillRect(4, 7, 7, 1);
+  },
+
+  nugget: (g, base, d) => {
+    for (let i = 0; i < 4; i++) {
+      const x = 3 + Math.floor(noiseAt(i, 60, d.id) * 8);
+      const y = 3 + Math.floor(noiseAt(i, 61, d.id) * 8);
+      const s = 3 + Math.floor(noiseAt(i, 62, d.id) * 2);
+      g.fillStyle = css(shade(base, 0.85 + noiseAt(i, 63, d.id) * 0.5));
+      g.fillRect(x, y, s, s);
+      g.fillStyle = css(shade(base, 1.6), 0.7);
+      g.fillRect(x, y, 1, 1);
+    }
+  },
+
+  gem: (g, base) => {
+    g.fillStyle = css(base);
+    g.beginPath();
+    g.moveTo(8, 2); g.lineTo(13, 7); g.lineTo(8, 14); g.lineTo(3, 7);
+    g.closePath(); g.fill();
+    g.fillStyle = css(shade(base, 1.45), 0.9);
+    g.beginPath();
+    g.moveTo(8, 2); g.lineTo(13, 7); g.lineTo(8, 7);
+    g.closePath(); g.fill();
+    g.fillStyle = 'rgba(255,255,255,0.7)';
+    g.fillRect(6, 5, 2, 1);
+  },
+
   material: (g, base, d) => {
     grain(g, base, d.id, 0.3);
     g.fillStyle = 'rgba(0,0,0,0.35)';

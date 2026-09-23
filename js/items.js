@@ -45,6 +45,19 @@ export const SHULKER_SHELL = 305;
 export const ECHO_SHARD = 306;
 export const SNOWBALL = 307;
 
+// --- crafting materials ---
+export const STICK = 310;
+export const COAL = 311;
+export const IRON_INGOT = 312;
+export const GOLD_INGOT = 313;
+export const COPPER_INGOT = 314;
+export const DIAMOND = 315;
+export const EMERALD = 316;
+export const LAPIS = 317;
+export const REDSTONE = 318;
+export const QUARTZ = 319;
+export const NETHERITE_INGOT = 320;
+
 const R = {};
 
 function def(id, name, opts = {}) {
@@ -96,6 +109,18 @@ def(PHANTOM_MEMBRANE, 'Phantom Membrane', { tint: '#6a5e7a' });
 def(SHULKER_SHELL, 'Shulker Shell', { tint: '#9a6a9a' });
 def(ECHO_SHARD, 'Echo Shard', { tint: '#1f9a9a' });
 def(SNOWBALL, 'Snowball', { tint: '#e8f2fb', stack: 16 });
+
+def(STICK, 'Stick', { tint: '#9c7440', icon: 'stick' });
+def(COAL, 'Coal', { tint: '#26262c', icon: 'nugget' });
+def(IRON_INGOT, 'Iron Ingot', { tint: '#d8d8de', icon: 'ingot' });
+def(GOLD_INGOT, 'Gold Ingot', { tint: '#f0cf52', icon: 'ingot' });
+def(COPPER_INGOT, 'Copper Ingot', { tint: '#d98149', icon: 'ingot' });
+def(DIAMOND, 'Diamond', { tint: '#5fe3dc', icon: 'gem' });
+def(EMERALD, 'Emerald', { tint: '#36cd47', icon: 'gem' });
+def(LAPIS, 'Lapis Lazuli', { tint: '#2a51b8', icon: 'nugget' });
+def(REDSTONE, 'Redstone', { tint: '#d33b32', icon: 'nugget' });
+def(QUARTZ, 'Nether Quartz', { tint: '#e8e2dc', icon: 'gem' });
+def(NETHERITE_INGOT, 'Netherite Ingot', { tint: '#5a4f52', icon: 'ingot' });
 
 export const ITEMS = R;
 
