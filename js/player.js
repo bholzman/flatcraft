@@ -2,6 +2,7 @@ import {
   GRAVITY, MOVE_ACCEL, MOVE_SPEED, AIR_ACCEL_SCALE, GROUND_FRICTION, AIR_FRICTION,
   JUMP_SPEED, MAX_FALL_SPEED, COYOTE_TIME, JUMP_BUFFER, PLAYER_W, PLAYER_H,
   LIQUID_DRAG, LIQUID_SINK, SWIM_SPEED, FLY_ACCEL, FLY_SPEED, FLY_DAMP,
+  SWING_TIME, SWING_IMPACT,
 } from './config.js';
 import { isLiquid, LAVA } from './blocks.js';
 
@@ -30,6 +31,29 @@ export class Player {
     this.fallFrom = null;    // y where the current fall started
     this.lavaBurn = 0;
     this.dead = false;
+
+    this.swingT = -1;        // seconds into the current swing, -1 when idle
+    this.aim = null;         // world point the arm reaches for, or null at rest
+  }
+
+  get swinging() { return this.swingT >= 0; }
+
+  /** 0..1 through the current swing, or null when the arm is at rest. */
+  get swingProgress() { return this.swinging ? this.swingT / SWING_TIME : null; }
+
+  startSwing() {
+    this.swingT = 0;
+  }
+
+  /** Advance the swing; true on the frame it connects. */
+  advanceSwing(dt) {
+    if (!this.swinging) return false;
+    const impact = SWING_TIME * SWING_IMPACT;
+    const before = this.swingT;
+    this.swingT += dt;
+    const landed = before < impact && this.swingT >= impact;
+    if (this.swingT >= SWING_TIME) this.swingT = -1;
+    return landed;
   }
 
   get centerY() { return this.y + this.h / 2; }

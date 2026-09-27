@@ -378,6 +378,33 @@ def(BLUE_ICE, 'Blue Ice', { hardness: 1.4, tint: '#6fb4ec', style: 'ice', alpha:
 def(POWDER_SNOW, 'Powder Snow', { solid: false, hardness: 0.3, tint: '#e8f2fb', style: 'plain' });
 def(MANGROVE_PLANKS, 'Mangrove Planks', { hardness: 0.9, tint: '#8a4a42', style: 'planks' });
 
+// What each block is made of, which decides how it sounds when struck and
+// which tool digs it faster. Derived from style and name rather than tagged
+// on every definition above; a `material` given in a def still wins.
+const STYLE_MATERIAL = {
+  planks: 'wood', log: 'wood', birch_log: 'wood', chest: 'wood', crafting: 'wood',
+  bookshelf: 'wood', fence: 'wood', ladder: 'wood', door: 'wood',
+  leaves: 'plant', plant: 'plant', flower: 'plant', vine: 'plant', flat: 'plant',
+  moss: 'dirt', grass: 'dirt', soul: 'sand',
+  glass: 'glass', ice: 'glass', crystal: 'glass',
+  wool: 'cloth', web: 'cloth',
+};
+const NAME_MATERIAL = [
+  [/stone|deepslate|basalt|brick|ore|obsidian|terracotta|purpur|calcite|prismarine|netherrack|andesite|granite|diorite|furnace|spawner|magma|rail|lantern|nylium/i, 'stone'],
+  [/snow/i, 'snow'],
+  [/sand|gravel/i, 'sand'],
+  [/dirt|mud|clay|farmland|sculk/i, 'dirt'],
+  [/hay|cactus|dripleaf|lily|wart|shroom|torch|end rod/i, 'plant'],
+];
+
+// The name wins over the style: nylium is stone under a grass-style top, and
+// a snow layer is drawn flat like a lily pad but is still snow.
+for (const d of Object.values(R)) {
+  if (d.material) continue;
+  const byName = NAME_MATERIAL.find(([re]) => re.test(d.name));
+  d.material = byName?.[1] ?? STYLE_MATERIAL[d.style] ?? 'stone';
+}
+
 export const BLOCKS = R;
 
 export function block(id) {
@@ -395,6 +422,11 @@ export function isLiquid(id) {
 export function isBreakable(id) {
   const b = block(id);
   return id !== AIR && b.hardness !== null;
+}
+
+/** 'stone', 'wood', 'dirt', 'sand', 'snow', 'plant', 'glass' or 'cloth'. */
+export function materialOf(id) {
+  return block(id).material;
 }
 
 /** What lands in the inventory when `id` is mined. */

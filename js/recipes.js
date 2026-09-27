@@ -91,6 +91,12 @@ const SWORD_MATERIALS = [
 for (const [mat, sword] of SWORD_MATERIALS) {
   recipe('Combat', [sword, 1], [[mat, 2], [I.STICK, 1]]);
 }
+// Pickaxes are tools, but they share the sword's material ladder.
+const PICKAXES = [I.WOODEN_PICKAXE, I.STONE_PICKAXE, I.IRON_PICKAXE,
+  I.GOLDEN_PICKAXE, I.DIAMOND_PICKAXE, I.NETHERITE_PICKAXE];
+SWORD_MATERIALS.forEach(([mat], i) => {
+  recipe('Tools', [PICKAXES[i], 1], [[mat, 3], [I.STICK, 2]], { grid: 3 });
+});
 recipe('Combat', [I.BOW, 1], [[I.STICK, 3], [I.STRING, 3]], { grid: 3 });
 recipe('Combat', [I.ARROW, 4], [[I.FLINT, 1], [I.STICK, 1], [I.FEATHER, 1]]);
 recipe('Combat', [I.FLINT_AND_STEEL, 1], [[I.IRON_INGOT, 1], [I.FLINT, 1]]);

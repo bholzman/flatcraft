@@ -30,6 +30,7 @@ keep running a stale copy of an edited module until you hard-reload.
 | `C` | Crafting |
 | `I` | Backpack |
 | `M` | Toggle the map overlay |
+| `N` | Toggle sound |
 | Hover | Tooltip naming the block, mob, or structure under the cursor |
 | `G` | Cycle survival → creative → spectator |
 | `B` | Travel to any biome or structure, set the time (creative / spectator) |
@@ -50,8 +51,8 @@ Only survival takes damage; creative and spectator are invulnerable.
 
 ## Crafting
 
-`C` opens the recipe book: 70 recipes across wood, building, snow, light,
-combat, brewing and smelting. Each row shows what it makes, what it needs with
+`C` opens the recipe book: 76 recipes across wood, building, snow, light,
+tools, combat, brewing and smelting. Each row shows what it makes, what it needs with
 have/need counts, and why it isn't available yet. **Craft** makes one, **x8**
 makes a batch, and a filter hides everything you can't currently make.
 
@@ -64,6 +65,23 @@ contact with a browser and one mouse button.
 
 Ores now drop their material, so the chain works: coal ore gives coal, iron
 ore smelts to an ingot, and log → planks → sticks → sword runs end to end.
+
+## Digging and tools
+
+Holding left click swings the held item — sword, pickaxe, block, or a bare
+fist — in an arc toward the cursor. Every swing that connects with the block
+being dug lands a strike: the block flashes white and jolts, chips spray off
+it in its own colours, and a sound matched to its material plays (stone
+clicks, wood knocks, dirt thuds, glass pings). Breaking it adds a bigger burst
+and a crunch. Sounds are synthesised with WebAudio, so there are still no
+assets; `N` mutes them and the choice is remembered.
+
+**Pickaxes** come in the six sword tiers and dig stone, ore, ice and glass
+faster — 1.6x for wood up to 4.8x for netherite, with gold fast and fragile as
+in Minecraft. They need a crafting table (three of the material plus two
+sticks), and a wooden one is in the starter kit. The tooltip's mining time
+accounts for whatever you're holding. There's no tier gating yet: a bare hand
+still mines everything, just slower.
 
 ## Day and night
 
@@ -107,7 +125,7 @@ Spawning follows the player's depth, so digging down changes what you meet
 rather than filling the surface far above you, and the time of day decides
 whether the surface is safe.
 
-Combat: six sword tiers (4–8 damage, 1 bare-handed), a bow that charges while
+Combat: six sword tiers (4–8 damage, 1 bare-handed; pickaxes hit for 2–6), a bow that charges while
 you hold right click, and six potions — healing, regeneration, strength,
 swiftness, fire resistance, and a thrown splash potion of harming. Projectiles
 solve their own launch angle, so a shot aimed at a mob connects rather than
@@ -187,10 +205,12 @@ js/structures.js structure registry, cross-section builders, placement
 js/loot.js       per-structure chest loot tables
 js/minimap.js    corner map overlay
 js/recipes.js    crafting and smelting recipes, fuel values
+js/sfx.js        synthesised sound effects (WebAudio, no assets)
+js/particles.js  block debris thrown off by strikes and breaks
 ```
 
 ## Not built yet
 
-Tool tiers, hunger, world save/load, chunked streaming, sound,
+Axes and shovels, pickaxe tier gating, hunger, world save/load, chunked streaming, sound,
 breeding/taming. The Ender Dragon exists and fights, but has no boss mechanics
 — no perches, healing crystals, or end-of-fight sequence.

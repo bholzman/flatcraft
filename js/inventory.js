@@ -131,11 +131,13 @@ export class Inventory {
   /** Starter kit: enough to build with, and enough to defend yourself. */
   giveStarter() {
     this.add(I.WOODEN_SWORD, 1);
+    this.add(I.WOODEN_PICKAXE, 1);
     this.add(I.BOW, 1);
     this.add(I.ARROW, 16);
     this.add(I.POTION_HEALING, 2);
     this.add(I.FLINT_AND_STEEL, 1);
-    for (const id of PLACEABLE.slice(0, 4)) this.add(id, 16);
+    // Three block stacks, so the whole kit still fits on the hotbar.
+    for (const id of PLACEABLE.slice(0, 3)) this.add(id, 16);
   }
 
   changed() {

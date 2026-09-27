@@ -11,6 +11,7 @@ export const LOOT = {
     e(B.OAK_PLANKS, 0.8, 4, 12), e(I.RAW_BEEF, 0.5, 1, 3),
     e(I.LEATHER, 0.4, 1, 3), e(B.HAY_BALE, 0.4, 1, 3),
     e(I.IRON_SWORD, 0.15, 1), e(I.ARROW, 0.35, 3, 8),
+    e(I.STONE_PICKAXE, 0.2, 1),
     e(I.FLINT_AND_STEEL, 0.25, 1), e(I.FLINT, 0.4, 1, 3),
     e(B.IRON_ORE, 0.3, 1, 4), e(I.POTION_HEALING, 0.12, 1),
   ],
@@ -64,6 +65,7 @@ export const LOOT = {
     e(B.IRON_ORE, 0.5, 1, 5), e(B.COAL_ORE, 0.6, 2, 8),
     e(B.GOLD_ORE, 0.2, 1, 3), e(I.BONE, 0.4, 1, 4),
     e(B.RAIL, 0.5, 2, 8), e(B.OAK_PLANKS, 0.4, 3, 8),
+    e(I.IRON_PICKAXE, 0.25, 1), e(I.DIAMOND_PICKAXE, 0.03, 1),
   ],
   stronghold: [
     e(I.DIAMOND_SWORD, 0.1, 1), e(B.DIAMOND_ORE, 0.2, 1, 3),
