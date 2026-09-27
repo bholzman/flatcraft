@@ -26,14 +26,15 @@ keep running a stale copy of an edited module until you hard-reload.
 | Right click | Place the selected block |
 | `1`–`9` / scroll | Select hotbar slot |
 | Left click | Mine, or **attack** the mob under the cursor |
-| Right click *(or Ctrl-click)* | Place, open a chest, **draw the bow**, or **drink/throw a potion** |
+| Right click *(or Ctrl-click)* | Place, open a chest, **draw the bow**, **drink/throw a potion**, or **start a fire / light TNT** with flint and steel |
+| Right click a mob | Trade with a villager, tame a wolf (holding a bone), barter with a piglin (holding gold), light a creeper (flint and steel) |
 | `C` | Crafting |
 | `I` | Backpack |
 | `M` | Toggle the map overlay |
 | Hover | Tooltip naming the block, mob, or structure under the cursor |
 | `G` | Cycle survival → creative → spectator |
 | `B` | Travel to any biome or structure, set the time (creative / spectator) |
-| `E` | Block palette (creative) |
+| `E` | Block palette with search (creative) |
 | `F3` | Debug overlay |
 
 Stand in a portal for a moment to change realm.
@@ -46,7 +47,15 @@ Stand in a portal for a moment to change realm.
 | Creative | Fly | Instant mining, infinite blocks, longer reach |
 | Spectator | Fly through blocks | Look only — no mining, placing or targeting |
 
-Only survival takes damage; creative and spectator are invulnerable.
+Only survival takes damage; creative and spectator are invulnerable -- except
+to the void, which kills in every mode. The void is past either side edge of
+every realm, and in the End it has a floor 10 blocks under the lowest island.
+
+Generated trees are solid to build against but walk-through for the player,
+mobs and arrows; a log you place yourself is an ordinary wall. Doors let the
+player through but stop mobs. With your head under water you have 15 seconds
+of air, then drown a heart a second; you can still jump off the bottom or out
+of the surface onto a ledge.
 
 ## Crafting
 
@@ -90,18 +99,68 @@ isn't one nearby, and the return trip lands where you started rather than
 drifting a little further each crossing. Flint and steel is in the starter
 kit, in several loot tables, and gravel drops flint.
 
+## Fire
+
+Flint and steel sets fire to the spot you click, or to the top of the block you
+click, and lights TNT. Fire eats planks, logs, leaves, wool, hay, bookshelves
+and plants, leaps to open air near more fuel (mostly upward, so trees go up
+fast), and burns out after a few seconds -- except on netherrack and soul sand,
+where it burns forever, as it does across the Nether wastes. Water beside a
+fire puts it out, and at most 600 fires burn at once, so a forest fire takes a
+forest rather than the world.
+
+Standing in fire or lava sets you (or a mob) alight, and you keep burning for a
+few seconds after stepping out; jump in water to put it out. Fire resistance
+ignores all of it, and Nether mobs don't burn. Blaze fireballs start fires
+where they land, ghast blasts leave fire behind, and lit TNT flashes for four
+seconds before a blast that sets off any TNT caught in it.
+
 ## Mobs and combat
 
-47 mobs spawn into the biomes they belong in — pigs and bees in the plains,
+54 mobs spawn into the biomes they belong in — pigs and bees in the plains,
 husks and rabbits in the desert, dolphins and drowned in the ocean, frogs and
 witches in the swamp, polar bears and strays in the snow, axolotls and glow
 squid in the lush caves, wardens in the deep dark, piglins and ghasts in the
-Nether, endermen and shulkers in the End.
+Nether, endermen and shulkers in the End, pillager patrols in the open.
 
 - **Passive** (16) wander, and flee when hit.
-- **Neutral** (11) ignore you until provoked, then fight back.
-- **Hostile** (20) hunt you on sight, and some shoot: skeletons and strays fire
-  arrows, ghasts and blazes fire fireballs, witches throw splash potions.
+- **Neutral** (12) ignore you until provoked, then fight back.
+- **Hostile** (25) hunt you on sight, and some shoot: skeletons and strays fire
+  arrows, pillagers crossbows, ghasts and blazes fireballs, witches splash
+  potions, shulkers homing bullets.
+- **Guard** (1): the snow golem never turns on you.
+
+Mobs fight each other too. Iron and snow golems attack monsters and illagers;
+zombies and illagers hunt villagers, who run from them; wolves hunt sheep,
+rabbits and skeletons, and skeletons run from wolves. Stray shots never hurt a
+teammate. Each mob has its standard behaviour:
+
+| Mob | Behaviour |
+| --- | --- |
+| Creeper | Lights a fuse when close, swells and flashes, and explodes — breaking blocks and hurting everything nearby. Walk away in time and it fizzles |
+| Enderman | Blinks about, dodges arrows by teleporting, hates water, and turns on you if the cursor rests on it (a stare) |
+| Zombie, skeleton, stray, phantom | Burn in daylight under open sky |
+| Spider | Neutral by day, hostile at night and underground; climbs walls |
+| Cave spider, bee, wither skeleton, stray | Poison, poison, wither, slowness |
+| Slime, magma cube | Hop, and split into smaller copies when killed |
+| Witch | Drinks a healing potion when hurt |
+| Blaze | Fires fireballs in bursts of three |
+| Ghast | Fireballs explode on impact |
+| Shulker | Homing bullets that levitate you (and then you fall) |
+| Warden | Blind: hears you moving or digging through walls; sonic boom ignores walls |
+| Phantom | Circles high, then swoops |
+| Wolf | Packs defend each other; tame with bones and it follows and fights for you |
+| Bee, zombified piglin, piglin | Hit one and the rest join in; a bee dies soon after it stings |
+| Piglin | Hostile unless you're holding gold; right-click with a gold ingot to barter |
+| Hoglin, iron golem, goat | Launch or ram you |
+| Villager | Seven professions, each with its own trades for emeralds |
+| Iron golem | Guards villages; turns on you if you hit a villager |
+| Snow golem | Throws snowballs (they hurt blazes), leaves snow, melts somewhere hot |
+| Pillager, vindicator, evoker, vex, ravager | The illagers. Evokers summon vexes, which fly through walls, and snap fangs along the ground; they drop a Totem of Undying, which saves you from one death while it's in your hotbar |
+
+Build a **snow golem** from two snow blocks topped with a carved pumpkin, and
+an **iron golem** from a T of four iron blocks topped with one. Pumpkins grow
+wild in plains, meadow, forest and taiga.
 
 Spawning follows the player's depth, so digging down changes what you meet
 rather than filling the surface far above you, and the time of day decides
@@ -172,7 +231,11 @@ structure where there's room, on the surface above it when there isn't
 (buried treasure is a chest inside a block of sand).
 
 **Chests** roll a loot table the first time you right-click them (18 tables,
-one per structure) and keep whatever doesn't fit in your inventory.
+one per structure), show exactly what you took, and keep whatever doesn't fit.
+
+Villages, outposts, mansions and swamp huts come with their residents —
+villagers and an iron golem, pillagers, vindicators and an evoker, a witch —
+who appear as you approach.
 **Spawners** run only while you're within 22 blocks and cap the mobs they've
 made nearby, so a dungeon doesn't eat the whole population budget.
 
@@ -182,7 +245,7 @@ made nearby, so a dungeon doesn't eat the whole population budget.
 js/items.js      swords, bow, arrows, potions, mob drops (ids >= 256)
 js/mobs.js       mob registry: stats, biomes, behaviour, palettes
 js/entities.js   mob AI, projectiles, ballistics, spawning
-js/physics.js    shared AABB sweep used by the player and every mob
+js/physics.js    AABB sweep for mobs (the player has its own: it can pass doors)
 js/structures.js structure registry, cross-section builders, placement
 js/loot.js       per-structure chest loot tables
 js/minimap.js    corner map overlay
@@ -191,6 +254,6 @@ js/recipes.js    crafting and smelting recipes, fuel values
 
 ## Not built yet
 
-Tool tiers, hunger, world save/load, chunked streaming, sound,
-breeding/taming. The Ender Dragon exists and fights, but has no boss mechanics
+Tool tiers, hunger, world save/load, chunked streaming, sound, breeding,
+raids. The Ender Dragon exists and fights, but has no boss mechanics
 — no perches, healing crystals, or end-of-fight sequence.

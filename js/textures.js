@@ -489,6 +489,57 @@ const PAINTERS = {
     g.fillRect(RES / 2 - 4, 11, 8, 2);
   },
 
+  pumpkin: (g, base, d) => {
+    grain(g, base, d.id, 0.14);
+    g.fillStyle = css(shade(base, 0.7), 0.8);             // ribs
+    for (let x = 3; x < RES; x += 4) g.fillRect(x, 2, 1, RES - 2);
+    g.fillStyle = css(shade(base, 1.18), 0.6);
+    for (let x = 1; x < RES; x += 4) g.fillRect(x, 3, 1, RES - 5);
+    g.fillStyle = '#5a7a2a';                             // stem
+    g.fillRect(RES / 2 - 1, 0, 2, 3);
+  },
+
+  carved_pumpkin: (g, base, d) => {
+    PAINTERS.pumpkin(g, base, d);
+    g.fillStyle = '#2a1608';
+    g.fillRect(3, 5, 3, 3);                              // eyes
+    g.fillRect(10, 5, 3, 3);
+    g.fillRect(3, 10, 10, 2);                            // grin
+    g.fillRect(4, 12, 2, 1);
+    g.fillRect(10, 12, 2, 1);
+    g.fillStyle = '#e8a83a';                             // candle glint
+    g.fillRect(4, 6, 1, 1);
+    g.fillRect(11, 6, 1, 1);
+  },
+
+  metal: (g, base, d) => {
+    grain(g, base, d.id, 0.08, 0.95);
+    g.fillStyle = css(shade(base, 0.72));                // plate edge
+    g.fillRect(0, 0, RES, 1);
+    g.fillRect(0, RES - 1, RES, 1);
+    g.fillRect(0, 0, 1, RES);
+    g.fillRect(RES - 1, 0, 1, RES);
+    g.fillStyle = css(shade(base, 1.12));                // highlight
+    g.fillRect(1, 1, RES - 2, 1);
+    g.fillRect(1, 1, 1, RES - 2);
+    g.fillStyle = css(shade(base, 0.6));                 // rivets
+    for (const [x, y] of [[2, 2], [RES - 3, 2], [2, RES - 3], [RES - 3, RES - 3]]) g.fillRect(x, y, 1, 1);
+  },
+
+  fire: (g, base) => {                                  // static stand-in; the renderer animates it
+    for (let i = 0; i < 4; i++) {
+      const x = i * (RES / 4);
+      const h = RES * (i % 2 ? 0.6 : 0.85);
+      g.fillStyle = i % 2 ? '#ffc846' : css(base);
+      g.beginPath();
+      g.moveTo(x - 1, RES);
+      g.lineTo(x + RES / 8, RES - h);
+      g.lineTo(x + RES / 4 + 1, RES);
+      g.closePath();
+      g.fill();
+    }
+  },
+
   torch: (g, base) => {
     g.fillStyle = '#6b4c2b';
     g.fillRect(RES / 2 - 1, RES - 9, 2, 9);

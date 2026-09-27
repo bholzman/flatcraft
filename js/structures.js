@@ -9,6 +9,7 @@ function brush(world, rand) {
   // Every write is tracked so a structure ends up knowing its own footprint,
   // which is what lets the tooltip name the thing you're standing in.
   const bounds = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
+  const residents = [];
 
   const set = (x, y, id) => {
     if (!world.inBounds(x, y)) return;
@@ -24,6 +25,7 @@ function brush(world, rand) {
     rand,
     set,
     bounds,
+    residents,
 
     /** Inclusive rectangle fill. */
     fill(x0, y0, x1, y1, id) {
@@ -67,6 +69,11 @@ function brush(world, rand) {
     spawner(x, y, mobId) {
       set(x, y, B.SPAWNER);
       world.setData(x, y, { kind: 'spawner', mob: mobId, cooldown: 0 });
+    },
+
+    /** Someone who lives here, centred on column `x` (+0.5), standing on floor row `floorY`. */
+    resident(x, floorY, mobId) {
+      residents.push({ mob: mobId, x: x + 0.5, feetY: floorY });
     },
 
     pick(list) {
@@ -127,12 +134,14 @@ export const STRUCTURES = {
       b.fill(cx + 1, groundY, cx + 1, groundY + 3, B.WATER);
       b.set(cx, groundY, B.COBBLESTONE);
       b.set(cx + 2, groundY, B.COBBLESTONE);
+      b.resident(cx + 3.5, groundY, 'iron_golem');        // two blocks wide: between well and first house
       cx += 5;
 
       const houses = 3 + Math.floor(b.rand() * 2);
       for (let i = 0; i < houses; i++) {
         const w = 4 + Math.floor(b.rand() * 3);
         house(b, cx, groundY, w, 4 + Math.floor(b.rand() * 2), pal);
+        b.resident(cx + w + 1, groundY, 'villager');        // out front, not shut indoors
         cx += w + 2;
 
         if (b.chance(0.6)) {                             // farm plot
@@ -213,7 +222,7 @@ export const STRUCTURES = {
       b.set(x + 1, floorY - 1, B.CRAFTING_TABLE);
       b.set(x + 5, floorY - 1, B.FURNACE);
       b.chest(x + 2, floorY - 1, 'swamp_hut');
-      b.spawner(x + 4, floorY - 2, 'witch');
+      b.resident(x + 4, floorY, 'witch');
       b.set(x + 3, floorY - 3, B.LANTERN);
     },
   },
@@ -244,6 +253,10 @@ export const STRUCTURES = {
         if (b.chance(0.8)) b.chest(x + 2 + Math.floor(b.rand() * (w - 4)), fy - 1, 'mansion');
         if (b.chance(0.6)) b.set(x + 4, fy - 1, B.BOOKSHELF);
         b.set(x + 1, fy - 1, B.LANTERN);
+
+        // Vindicators guard the rooms; an evoker keeps the top floor.
+        b.resident(x + 9, fy, f === floors - 1 ? 'evoker' : 'vindicator');
+        if (b.chance(0.6)) b.resident(x + 15, fy, 'vindicator');
       }
 
       b.set(x + 2, groundY - 1, B.OAK_DOOR);
@@ -267,8 +280,9 @@ export const STRUCTURES = {
       b.fill(x - 1, groundY - h - 1, x + 6, groundY - h - 1, B.DARK_OAK_PLANKS);
       b.fill(x + 6, groundY - h, x + 6, groundY - h + 2, B.RED_WOOL);   // banner
       b.chest(x + 3, groundY - 2, 'outpost');
-      b.spawner(x + 3, groundY - h + 2, 'zombie');
       b.set(x + 4, groundY - h + 1, B.LANTERN);
+      for (const px of [x + 7, x + 8, x + 9]) b.resident(px, groundY, 'pillager');
+      b.resident(x + 2, groundY - h - 1, 'pillager');       // lookout on the roof
     },
   },
 
@@ -686,12 +700,18 @@ export function placeStructures(world, rand) {
           const y = undergroundY(world, x, def.band, rand);
           if (y === null) continue;
           def.build(b, x, y);
-          world.structures.push({ id, name: def.name, x, y, ...b.bounds });
+          world.structures.push({ id, name: def.name, x, y, ...b.bounds, residents: b.residents });
           break;
         }
 
         const biomeId = world.bandAt(x).id;
         if (def.biomes && !def.biomes.includes(biomeId)) continue;
+
+        // Neighbouring cells can pick spots that overlap; the second build
+        // would carve through the first.
+        const clash = world.structures.some((s) => STRUCTURES[s.id].place !== 'underground'
+          && x < s.x1 + 3 && x + def.width > s.x0 - 3);
+        if (clash) continue;
 
         const spread = terrainSpread(world, x, def.width);
         if (!spread) continue;
@@ -703,7 +723,7 @@ export function placeStructures(world, rand) {
 
         if (def.level !== false) levelGround(world, x, def.width, spread.hi);
         def.build(b, x, spread.hi, biomeId);
-        world.structures.push({ id, name: def.name, x, y: spread.hi, ...b.bounds });
+        world.structures.push({ id, name: def.name, x, y: spread.hi, ...b.bounds, residents: b.residents });
         break;
       }
     }

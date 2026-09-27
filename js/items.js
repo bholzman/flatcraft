@@ -44,6 +44,7 @@ export const PHANTOM_MEMBRANE = 304;
 export const SHULKER_SHELL = 305;
 export const ECHO_SHARD = 306;
 export const SNOWBALL = 307;
+export const TOTEM_OF_UNDYING = 308;
 
 // --- crafting materials ---
 export const STICK = 310;
@@ -109,6 +110,8 @@ def(PHANTOM_MEMBRANE, 'Phantom Membrane', { tint: '#6a5e7a' });
 def(SHULKER_SHELL, 'Shulker Shell', { tint: '#9a6a9a' });
 def(ECHO_SHARD, 'Echo Shard', { tint: '#1f9a9a' });
 def(SNOWBALL, 'Snowball', { tint: '#e8f2fb', stack: 16 });
+// Kept anywhere in the hotbar, it cheats death once.
+def(TOTEM_OF_UNDYING, 'Totem of Undying', { kind: 'totem', stack: 1, tint: '#e8c43a', icon: 'gem' });
 
 def(STICK, 'Stick', { tint: '#9c7440', icon: 'stick' });
 def(COAL, 'Coal', { tint: '#26262c', icon: 'nugget' });

@@ -7,8 +7,10 @@ export const ZOOM = 2;               // integer scale factor applied to TILE
 export const REALMS = {
   overworld: { w: 4096, h: 320, liquidLevel: 118, surfaceLevel: 110, liquid: 'water' },
   nether:    { w: 2048, h: 192, liquidLevel: 58, surfaceLevel: 42, liquid: 'lava', ceiling: 6 },
-  end:       { w: 1536, h: 160, liquidLevel: -1, surfaceLevel: 70,  liquid: null },
+  end:       { w: 1536, h: 160, liquidLevel: -1, surfaceLevel: 70,  liquid: null, voidDepth: 10 },
 };
+// Past the side edges and below the floor is void, and void kills. voidDepth
+// raises the End's floor to this many blocks below its lowest island.
 
 export const START_REALM = 'overworld';
 
@@ -72,6 +74,14 @@ export const JUMP_BUFFER = 0.12;     // grace period for jumping before landing
 export const LIQUID_DRAG = 0.62;
 export const LIQUID_SINK = 0.35;
 export const SWIM_SPEED = 7.5;
+export const WATER_JUMP_TIME = 0.3;  // seconds a jump out of water ignores liquid drag
+
+// Breath, in seconds. It runs down while the head is under water, then
+// drowning takes DROWN_DAMAGE every DROWN_INTERVAL until you surface.
+export const MAX_AIR = 15;
+export const AIR_REFILL = 5;         // seconds of breath regained per second
+export const DROWN_DAMAGE = 2;
+export const DROWN_INTERVAL = 1;
 
 export const PLAYER_W = 0.7;         // player hitbox, in blocks
 export const PLAYER_H = 1.8;

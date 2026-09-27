@@ -2,13 +2,18 @@
 // so ids must stay below 256.
 //
 // Fields:
-//   solid    - blocks player movement
+//   solid    - blocks movement and can be built against (generated trees
+//              are solid but walk-through; see World.blocksMovementAt)
 //   hardness - seconds of mining at strength 1 (null = unbreakable)
 //   drops    - id added to the inventory when mined (block or item; defaults
 //              to itself). Ores drop their material, not the ore block.
 //   tint     - base colour; textures.js paints per-pixel variation on top
 //   style    - how textures.js draws it (see that file's painters)
 //   liquid   - swims through it instead of standing on it
+//   door     - the player walks through it; mobs can't
+//   flammable   - chance per second that it catches from a fire beside it
+//   eternalFire - fire on top of it never burns out (netherrack)
+//   hidden   - not something you can hold, so kept out of the palette
 //   emit     - 0..1 glow strength; lit blocks ignore depth darkening
 //   soil     - for 'grass' style, the block whose colour forms the underside
 //   speckle  - for 'ore' style, the mineral colour
@@ -194,6 +199,12 @@ export const BLUE_ICE = 148;
 export const POWDER_SNOW = 149;
 export const MANGROVE_PLANKS = 150;
 
+// --- golem parts ---
+export const PUMPKIN = 151;
+export const CARVED_PUMPKIN = 152;
+export const IRON_BLOCK = 153;
+export const FIRE = 154;
+
 const R = {};   // id -> definition
 
 function def(id, name, opts = {}) {
@@ -335,7 +346,7 @@ def(COBWEB, 'Cobweb', { solid: false, hardness: 1.4, tint: '#e0e4ea', style: 'we
 def(RAIL, 'Rail', { solid: false, hardness: 0.3, tint: '#8a8a92', style: 'rail' });
 def(OAK_FENCE, 'Oak Fence', { solid: false, hardness: 0.9, tint: '#a97b46', style: 'fence' });
 def(LADDER, 'Ladder', { solid: false, hardness: 0.4, tint: '#9c7440', style: 'ladder', climbable: true });
-def(OAK_DOOR, 'Oak Door', { solid: false, hardness: 0.9, tint: '#a97b46', style: 'door' });
+def(OAK_DOOR, 'Oak Door', { solid: false, hardness: 0.9, tint: '#a97b46', style: 'door', door: true });
 def(PRISMARINE, 'Prismarine', { hardness: 1.5, tint: '#5a9a8e', style: 'moss' });
 def(DARK_PRISMARINE, 'Dark Prismarine', { hardness: 1.5, tint: '#2e5449', style: 'layered' });
 def(SEA_LANTERN, 'Sea Lantern', { hardness: 0.5, tint: '#a8e4d8', style: 'glow', emit: 0.9 });
@@ -378,6 +389,27 @@ def(BLUE_ICE, 'Blue Ice', { hardness: 1.4, tint: '#6fb4ec', style: 'ice', alpha:
 def(POWDER_SNOW, 'Powder Snow', { solid: false, hardness: 0.3, tint: '#e8f2fb', style: 'plain' });
 def(MANGROVE_PLANKS, 'Mangrove Planks', { hardness: 0.9, tint: '#8a4a42', style: 'planks' });
 
+// A carved pumpkin on snow blocks or a T of iron blocks builds a golem.
+def(PUMPKIN, 'Pumpkin', { hardness: 1.0, tint: '#d9801e', style: 'pumpkin' });
+def(CARVED_PUMPKIN, 'Carved Pumpkin', { hardness: 1.0, tint: '#d9801e', style: 'carved_pumpkin' });
+def(IRON_BLOCK, 'Iron Block', { hardness: 3.0, tint: '#d8d8de', style: 'metal' });
+
+// Punching fire puts it out; it drops nothing.
+def(FIRE, 'Fire', { solid: false, hardness: 0.01, tint: '#f08a24', style: 'fire', emit: 1, drops: AIR, hidden: true });
+
+// What burns, and how readily. Nether wood, as in Minecraft, doesn't.
+const burns = (rate, ...ids) => ids.forEach((id) => { R[id].flammable = rate; });
+burns(0.9, TALL_GRASS, FLOWER_RED, FLOWER_YELLOW, DEAD_BUSH, VINES, WHEAT, HANGING_ROOTS,
+  GLOW_BERRIES, BIG_DRIPLEAF);
+burns(0.6, OAK_LEAVES, BIRCH_LEAVES, DARK_OAK_LEAVES, SPRUCE_LEAVES, JUNGLE_LEAVES,
+  ACACIA_LEAVES, MANGROVE_LEAVES, AZALEA_LEAVES, WHITE_WOOL, RED_WOOL, HAY_BALE);
+burns(0.35, BOOKSHELF);
+burns(0.3, OAK_PLANKS, SPRUCE_PLANKS, BIRCH_PLANKS, DARK_OAK_PLANKS, JUNGLE_PLANKS,
+  ACACIA_PLANKS, MANGROVE_PLANKS, OAK_FENCE, LADDER, BARREL, MOSS_BLOCK);
+burns(0.12, OAK_LOG, BIRCH_LOG, DARK_OAK_LOG, SPRUCE_LOG, JUNGLE_LOG, ACACIA_LOG, MANGROVE_LOG);
+burns(1, TNT);                       // doesn't burn away: it's lit
+for (const id of [NETHERRACK, MAGMA_BLOCK, SOUL_SAND, SOUL_SOIL]) R[id].eternalFire = true;
+
 export const BLOCKS = R;
 
 export function block(id) {
@@ -410,5 +442,5 @@ export function isDecoration(id) {
 
 /** Every id the player can hold and place, in a sensible hotbar order. */
 export const PLACEABLE = Object.values(R)
-  .filter((b) => b.id !== AIR && b.hardness !== null && b.style !== 'portal')
+  .filter((b) => b.id !== AIR && b.hardness !== null && b.style !== 'portal' && !b.hidden)
   .map((b) => b.id);

@@ -2,8 +2,9 @@ import {
   GRAVITY, MOVE_ACCEL, MOVE_SPEED, AIR_ACCEL_SCALE, GROUND_FRICTION, AIR_FRICTION,
   JUMP_SPEED, MAX_FALL_SPEED, COYOTE_TIME, JUMP_BUFFER, PLAYER_W, PLAYER_H,
   LIQUID_DRAG, LIQUID_SINK, SWIM_SPEED, FLY_ACCEL, FLY_SPEED, FLY_DAMP,
+  WATER_JUMP_TIME, MAX_AIR, AIR_REFILL, DROWN_DAMAGE, DROWN_INTERVAL,
 } from './config.js';
-import { isLiquid, LAVA } from './blocks.js';
+import { isLiquid, LAVA, WATER, FIRE } from './blocks.js';
 
 export class Player {
   constructor(world, spawn) {
@@ -29,6 +30,14 @@ export class Player {
     this.effects = {};       // name -> { value, time }
     this.fallFrom = null;    // y where the current fall started
     this.lavaBurn = 0;
+    this.waterJump = 0;      // > 0 while rising out of water on a jump
+    this.air = MAX_AIR;      // seconds of breath left
+    this.drownTimer = 0;
+    this.deathCause = null;  // set when something other than a hit kills
+    this.effectTick = 0;     // poison and wither bite on a timer
+    this.onFire = 0;         // seconds left alight
+    this.burnTick = 0;
+    this.onLethal = null;    // () => true if something (a totem) cheats this death
     this.dead = false;
   }
 
@@ -64,8 +73,12 @@ export class Player {
     }
 
     if (this.health <= 0) {
-      this.health = 0;
-      this.dead = true;
+      if (this.onLethal?.()) {
+        this.health = 1;
+      } else {
+        this.health = 0;
+        this.dead = true;
+      }
     }
     return true;
   }
@@ -77,6 +90,14 @@ export class Player {
     this.invuln = 1.5;
     this.effects = {};
     this.fallFrom = null;
+    this.air = MAX_AIR;
+    this.deathCause = null;
+    this.onFire = 0;
+  }
+
+  /** Set alight for at least `secs`. */
+  ignite(secs) {
+    this.onFire = Math.max(this.onFire, secs);
   }
 
   /** Timers, fall damage and lava: everything that hurts without a mob attached. */
@@ -92,8 +113,25 @@ export class Player {
     const regen = this.effect('regen');
     if (regen) this.heal(regen * dt);
 
+    // Poison wears you down but never finishes you; wither can.
+    const poison = this.effect('poison');
+    const wither = this.effect('wither');
+    if ((poison || wither) && !invulnerable) {
+      this.effectTick -= dt;
+      if (this.effectTick <= 0) {
+        this.effectTick = wither ? 2 : 1.25;
+        if (wither) {
+          if (this.hurt(wither, null, true) && this.dead) this.deathCause = 'Withered away';
+        } else if (this.health > 1) {
+          this.hurt(Math.min(poison, this.health - 1), null, true);
+        }
+      }
+    }
+
     if (invulnerable || this.flying) {
       this.fallFrom = null;
+      this.air = MAX_AIR;
+      this.onFire = 0;
       return;
     }
 
@@ -110,17 +148,56 @@ export class Player {
       this.fallFrom = null;
     }
 
-    // Lava burns on a tick, unless fire resistance is up.
-    const inLava = [...this.occupied()].includes(LAVA);
-    if (inLava && !this.effect('fireResist')) {
+    // Lava and fire burn on a tick and leave you alight for a while after.
+    // Water puts you out; fire resistance shrugs all of it off.
+    const occupied = this.occupied();
+    const inLava = occupied.has(LAVA);
+    const inFire = occupied.has(FIRE);
+    const fireproof = !!this.effect('fireResist');
+    if (inLava || inFire) this.ignite(inLava ? 8 : 5);
+    else if (this.inLiquid) this.onFire = 0;
+
+    if ((inLava || inFire) && !fireproof) {
       this.lavaBurn -= dt;
       if (this.lavaBurn <= 0) {
         this.lavaBurn = 0.5;
-        this.hurt(4, null, true);
+        if (this.hurt(inLava ? 4 : 1, null, true) && this.dead) {
+          this.deathCause = inLava ? 'Tried to swim in lava' : 'Burned to death';
+        }
       }
     } else {
       this.lavaBurn = 0;
     }
+
+    if (this.onFire > 0) {
+      this.onFire = Math.max(0, this.onFire - dt);
+      this.burnTick -= dt;
+      if (this.burnTick <= 0 && !inLava && !inFire && !fireproof) {
+        this.burnTick = 1;
+        if (this.hurt(1, null, true) && this.dead) this.deathCause = 'Burned to death';
+      }
+    }
+
+    // Breath runs down with the head under water; once it's gone, drowning bites.
+    if (this.headIn(WATER)) {
+      this.air = Math.max(0, this.air - dt);
+      if (this.air <= 0) {
+        this.drownTimer -= dt;
+        if (this.drownTimer <= 0) {
+          this.drownTimer = DROWN_INTERVAL;
+          if (this.hurt(DROWN_DAMAGE, null, true) && this.dead) this.deathCause = 'Drowned';
+        }
+      }
+    } else {
+      this.air = Math.min(MAX_AIR, this.air + AIR_REFILL * dt);
+      this.drownTimer = 0;
+    }
+  }
+
+  /** Whether the player's head is in `id` (or in any liquid, if `id` is omitted). */
+  headIn(id = null) {
+    const here = this.world.get(Math.floor(this.x), Math.floor(this.y + 0.25));
+    return id === null ? isLiquid(here) : here === id;
   }
 
   /** Move to a new realm's world without losing momentum bookkeeping. */
@@ -158,21 +235,31 @@ export class Player {
       const drop = friction * dt * Math.abs(this.vx);
       this.vx -= Math.sign(this.vx) * Math.min(Math.abs(this.vx), drop + friction * dt * 0.5);
     }
-    const boost = this.effect('speed') ?? 1;
+    const boost = (this.effect('speed') ?? 1) * (this.effect('slowness') ?? 1);
     const topSpeed = (this.inLiquid ? SWIM_SPEED : MOVE_SPEED) * boost;
     this.vx = Math.max(-topSpeed, Math.min(topSpeed, this.vx));
 
     // --- jump, with coyote time + input buffering so it feels forgiving ---
     this.coyote = this.onGround ? COYOTE_TIME : Math.max(0, this.coyote - dt);
     this.jumpBuffer = intent.jumpPressed ? JUMP_BUFFER : Math.max(0, this.jumpBuffer - dt);
+    this.waterJump = Math.max(0, this.waterJump - dt);
 
-    if (this.inLiquid) {
+    // In water a jump still works with something to push off: the bottom
+    // underfoot, or the surface once your head is out -- that's how you climb
+    // out onto a ledge. For a moment after, drag doesn't smother the jump.
+    if (this.inLiquid && this.jumpBuffer > 0 && (this.onGround || !this.headIn())) {
+      this.vy = -JUMP_SPEED;
+      this.jumpBuffer = 0;
+      this.onGround = false;
+      this.waterJump = WATER_JUMP_TIME;
+    }
+
+    if (this.inLiquid && this.waterJump <= 0) {
       // Swimming: holding jump paddles upward, otherwise sink slowly.
       if (intent.jumpHeld) this.vy -= JUMP_SPEED * 2.2 * dt;
       this.vy += GRAVITY * LIQUID_SINK * dt;
       this.vy *= Math.pow(LIQUID_DRAG, dt * 8);
       this.vx *= Math.pow(LIQUID_DRAG, dt * 4);
-      this.jumpBuffer = 0;
     } else {
       if (this.jumpBuffer > 0 && this.coyote > 0) {
         this.vy = -JUMP_SPEED;
@@ -182,9 +269,14 @@ export class Player {
       }
 
       // Releasing jump early cuts the arc short (variable-height jump).
-      if (!intent.jumpHeld && this.vy < 0) this.vy *= 0.86;
+      if (!intent.jumpHeld && this.vy < 0 && !this.effect('levitation')) this.vy *= 0.86;
 
-      this.vy = Math.min(MAX_FALL_SPEED, this.vy + GRAVITY * dt);
+      if (this.effect('levitation')) {
+        // A shulker bullet floats you upward until it wears off -- then you fall.
+        this.vy += (-3 - this.vy) * Math.min(1, dt * 4);
+      } else {
+        this.vy = Math.min(MAX_FALL_SPEED, this.vy + GRAVITY * dt);
+      }
     }
 
     this.moveAndCollide(this.vx * dt, this.vy * dt);
@@ -260,7 +352,7 @@ export class Player {
 
     for (let y = y0; y <= y1; y++) {
       for (let x = x0; x <= x1; x++) {
-        if (this.world.isSolidAt(x, y)) return true;
+        if (this.world.blocksMovementAt(x, y)) return true;
       }
     }
     return false;

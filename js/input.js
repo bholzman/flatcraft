@@ -10,21 +10,28 @@ export class Input {
     this.wheel = 0;
 
     window.addEventListener('keydown', (e) => {
-      if (e.repeat) return;
       const code = e.code;
-      this.held.add(code);
-      this.pressed.add(code);
+      this.held.add(code);             // repeats too, so a cleared key that's still down comes back
+      if (!e.repeat) this.pressed.add(code);
       if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'F3'].includes(code)) {
         e.preventDefault();
       }
     });
 
-    window.addEventListener('keyup', (e) => this.held.delete(e.code));
-    window.addEventListener('blur', () => {
+    // On macOS no keyup arrives for keys released while Cmd is down, so a
+    // Cmd shortcut mid-move would leave that key held forever. Releasing Cmd
+    // drops everything; anything still physically down re-registers on repeat.
+    window.addEventListener('keyup', (e) => {
+      if (e.key === 'Meta') this.held.clear();
+      else this.held.delete(e.code);
+    });
+    const releaseAll = () => {
       this.held.clear();
       this.mouse.left = this.mouse.right = false;
       this.rightFromCtrl = false;
-    });
+    };
+    window.addEventListener('blur', releaseAll);
+    document.addEventListener('visibilitychange', () => { if (document.hidden) releaseAll(); });
 
     canvas.addEventListener('mousemove', (e) => {
       const r = canvas.getBoundingClientRect();

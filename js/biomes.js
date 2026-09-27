@@ -20,6 +20,9 @@ const MESA_STRATA = [
 const tree = (shape, log, leaves, chance, minH, maxH) =>
   ({ kind: 'tree', shape, log, leaves, chance, minH, maxH });
 const plant = (blockId, chance) => ({ kind: 'plant', block: blockId, chance });
+// A lone pumpkin every hundred-odd blocks. Listed first in a biome's features
+// so tall grass and snow don't claim the cell before it rolls.
+const pumpkins = () => plant(B.PUMPKIN, 0.01);
 
 export const BIOMES = {
   // ---------------- overworld surface ----------------
@@ -50,7 +53,7 @@ export const BIOMES = {
     height: { base: 110, amp: 5, freq: 30 },
     surface: B.GRASS, sub: B.DIRT, subDepth: 4, stone: B.STONE,
     sky: ['#4d84c4', '#9cc3e0'],
-    features: [plant(B.TALL_GRASS, 0.34), plant(B.FLOWER_YELLOW, 0.03), plant(B.FLOWER_RED, 0.02),
+    features: [pumpkins(), plant(B.TALL_GRASS, 0.34), plant(B.FLOWER_YELLOW, 0.03), plant(B.FLOWER_RED, 0.02),
       tree('oak', B.OAK_LOG, B.OAK_LEAVES, 0.012, 4, 6)],
   },
   savanna: {
@@ -65,7 +68,7 @@ export const BIOMES = {
     height: { base: 102, amp: 10, freq: 40 },
     surface: B.GRASS, sub: B.DIRT, subDepth: 4, stone: B.STONE,
     sky: ['#4a86c8', '#a9d0e6'],
-    features: [plant(B.TALL_GRASS, 0.42), plant(B.FLOWER_RED, 0.08), plant(B.FLOWER_YELLOW, 0.08),
+    features: [pumpkins(), plant(B.TALL_GRASS, 0.42), plant(B.FLOWER_RED, 0.08), plant(B.FLOWER_YELLOW, 0.08),
       tree('oak', B.OAK_LOG, B.OAK_LEAVES, 0.006, 5, 7)],
   },
   taiga: {
@@ -73,7 +76,8 @@ export const BIOMES = {
     height: { base: 106, amp: 8, freq: 32 },
     surface: B.GRASS, sub: B.DIRT, subDepth: 4, stone: B.STONE,
     sky: ['#4a7ba8', '#9fb8c6'],
-    features: [plant(B.TALL_GRASS, 0.18), tree('spruce', B.SPRUCE_LOG, B.SPRUCE_LEAVES, 0.12, 7, 12)],
+    features: [pumpkins(), plant(B.TALL_GRASS, 0.18),
+      tree('spruce', B.SPRUCE_LOG, B.SPRUCE_LEAVES, 0.12, 7, 12)],
   },
   birch_forest: {
     name: 'Birch Forest',
@@ -101,7 +105,7 @@ export const BIOMES = {
     height: { base: 108, amp: 6, freq: 30 },
     surface: B.GRASS, sub: B.DIRT, subDepth: 4, stone: B.STONE,
     sky: ['#4d84c4', '#9cc3e0'],
-    features: [plant(B.TALL_GRASS, 0.3), plant(B.FLOWER_RED, 0.03),
+    features: [pumpkins(), plant(B.TALL_GRASS, 0.3), plant(B.FLOWER_RED, 0.03),
       tree('oak', B.OAK_LOG, B.OAK_LEAVES, 0.11, 5, 8)],
   },
   lake: {
@@ -164,7 +168,7 @@ export const BIOMES = {
     surface: B.SNOW_BLOCK, sub: B.DIRT, subDepth: 4, stone: B.STONE,
     freezes: true,
     sky: ['#628cb4', '#cfe0ec'],
-    features: [plant(B.SNOW_LAYER, 0.4),
+    features: [pumpkins(), plant(B.SNOW_LAYER, 0.4),
       tree('spruce', B.SPRUCE_LOG, B.SPRUCE_LEAVES, 0.13, 7, 13)],
   },
   grove: {
@@ -245,7 +249,8 @@ export const BIOMES = {
     height: { base: 42, amp: 8, freq: 26 },
     surface: B.NETHERRACK, sub: B.NETHERRACK, subDepth: 8, stone: B.NETHERRACK,
     sky: ['#3a0f0f', '#7a2410'],
-    features: [plant(B.GLOWSTONE, 0.01), { kind: 'pillar', block: B.BLACKSTONE, chance: 0.02, minH: 3, maxH: 7 }],
+    features: [plant(B.GLOWSTONE, 0.01), plant(B.FIRE, 0.012),
+      { kind: 'pillar', block: B.BLACKSTONE, chance: 0.02, minH: 3, maxH: 7 }],
   },
   lava_ring: {
     name: 'Lava Ring',

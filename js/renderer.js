@@ -238,10 +238,13 @@ export class Renderer {
     ctx.translate(-camPx, -camPy);
 
     this.drawBackdrop(ctx, world);
+    this.drawVoidHaze(ctx, world);
     const lights = this.drawTerrain(ctx, world, light);
+    this.drawPrimedTnt(ctx, world);
     for (const m of state.entities.mobs) this.drawMob(ctx, m, lights);
     for (const p of state.entities.projectiles) this.drawProjectile(ctx, p);
     this.drawPlayer(ctx, player);
+    for (const e of state.entities.effects) this.drawEffect(ctx, e);
     this.drawLights(ctx, lights, player);
     if (hover) this.drawHighlight(ctx, hover, mining);
 
@@ -298,6 +301,43 @@ export class Renderer {
     }
   }
 
+  /**
+   * A violet haze where the world meets the void -- rising off the End's floor
+   * and creeping in from each side edge -- so the deadly part is visible.
+   */
+  drawVoidHaze(ctx, world) {
+    const haze = 6;                                    // blocks the glow reaches
+    const left = this.camera.x * SCALE - SCALE;
+    const top = this.camera.y * SCALE - SCALE;
+    const w = this.viewW + SCALE * 2;
+    const h = this.viewH + SCALE * 2;
+    const clear = 'rgba(120, 60, 190, 0)';
+    const glow = 'rgba(150, 80, 220, 0.55)';
+
+    // The End's floor sits inside the world; elsewhere it's under bedrock.
+    const floor = world.voidFloor;
+    if (floor < world.height && top + h > (floor - haze) * SCALE) {
+      const grad = ctx.createLinearGradient(0, (floor - haze) * SCALE, 0, floor * SCALE);
+      grad.addColorStop(0, clear);
+      grad.addColorStop(1, glow);
+      ctx.fillStyle = grad;
+      ctx.fillRect(left, (floor - haze) * SCALE, w, haze * SCALE);
+      ctx.fillStyle = VOID_COLOUR;
+      ctx.fillRect(left, floor * SCALE, w, Math.max(0, top + h - floor * SCALE));
+    }
+
+    for (const [edge, inward] of [[0, 1], [world.width, -1]]) {
+      const x = edge * SCALE;
+      if (x + haze * SCALE < left || x - haze * SCALE > left + w) continue;
+      const inner = (edge + inward * haze) * SCALE;
+      const grad = ctx.createLinearGradient(inner, 0, x, 0);
+      grad.addColorStop(0, clear);
+      grad.addColorStop(1, glow);
+      ctx.fillStyle = grad;
+      ctx.fillRect(Math.min(x, inner), top, haze * SCALE, h);
+    }
+  }
+
   /** Draws visible blocks; returns the glowing ones for the lighting pass. */
   drawTerrain(ctx, world, light = 1) {
     const { x0, y0, x1, y1 } = this.viewBounds(world);
@@ -313,7 +353,8 @@ export class Renderer {
         const px = x * SCALE;
         const py = y * SCALE;
         const tex = textures[id];
-        if (tex) ctx.drawImage(tex, px, py, SCALE, SCALE);
+        if (def.style === 'fire') this.drawFire(ctx, px, py, x);
+        else if (tex) ctx.drawImage(tex, px, py, SCALE, SCALE);
 
         if (def.emit >= 0.4) {
           lights.push([px + SCALE / 2, py + SCALE / 2, def.emit, def.tint]);
@@ -338,6 +379,36 @@ export class Renderer {
       }
     }
     return lights;
+  }
+
+  /** Tongues of flame licking up from the bottom of a fire cell. */
+  drawFire(ctx, px, py, x) {
+    const t = performance.now() / 1000;
+    const tongues = 4;
+    const w = SCALE / tongues;
+    for (let i = 0; i < tongues; i++) {
+      const phase = t * 9 + x * 1.7 + i * 2.3;
+      const fh = SCALE * (0.55 + 0.35 * Math.sin(phase)) * (i % 2 ? 0.8 : 1);
+      const cx = px + w * (i + 0.5) + Math.sin(phase * 0.7) * w * 0.25;
+      ctx.fillStyle = i % 2 ? 'rgba(255,200,70,0.9)' : 'rgba(238,106,28,0.9)';
+      ctx.beginPath();
+      ctx.moveTo(cx - w * 0.85, py + SCALE);
+      ctx.lineTo(cx, py + SCALE - fh);
+      ctx.lineTo(cx + w * 0.85, py + SCALE);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
+  /** Lit TNT flashes white, faster as the fuse runs down. */
+  drawPrimedTnt(ctx, world) {
+    const t = performance.now() / 1000;
+    for (const p of world.primed.values()) {
+      const rate = p.fuse < 1 ? 14 : 6;
+      if (Math.sin(t * rate) < 0) continue;
+      ctx.fillStyle = 'rgba(255,255,255,0.6)';
+      ctx.fillRect(p.x * SCALE, p.y * SCALE, SCALE, SCALE);
+    }
   }
 
   drawLights(ctx, lights, player) {
@@ -391,6 +462,7 @@ export class Renderer {
     }
 
     ctx.restore();
+    if (p.onFire > 0) this.drawFlames(ctx, x, y, w, h, performance.now() / 250);
   }
 
   // ---- mobs ----
@@ -404,16 +476,19 @@ export class Renderer {
     const py = m.top * SCALE;
     const w = m.w * SCALE;
     const h = m.h * SCALE;
-    const pal = m.def.palette;
+    const pal = m.palette ?? m.def.palette;
     const face = m.facing >= 0 ? 1 : -1;
+    // A lit creeper swells as its fuse burns down.
+    const fuse = m.def.fuse ? Math.min(1, m.fuse / m.def.fuse.time) : 0;
+    const swell = 1 + fuse * 0.16;
 
     if (m.def.glow) lights.push([px + w / 2, py + h / 2, m.def.glow, pal.accent]);
 
     ctx.save();
-    // Flip around the mob's centre so every shape can be drawn facing right.
-    ctx.translate(px + w / 2, py);
-    ctx.scale(face, 1);
-    ctx.translate(-w / 2, 0);
+    // Flip (and swell) around the mob's feet so every shape can be drawn facing right.
+    ctx.translate(px + w / 2, py + h);
+    ctx.scale(face * swell, swell);
+    ctx.translate(-w / 2, -h);
 
     const R = (x, y, rw, rh, colour) => {
       ctx.fillStyle = colour;
@@ -428,6 +503,7 @@ export class Renderer {
         R(0, h * 0.2, w * 0.82, h - legH - h * 0.2, pal.body);
         R(w * 0.62, 0, w * 0.38, h * 0.42, pal.head);
         R(w * 0.9, h * 0.12, w * 0.08, h * 0.08, pal.accent);   // snout/eye
+        if (m.owner) R(w * 0.56, h * 0.22, w * 0.1, h * 0.18, '#c8302a');   // a pet's collar
         break;
       }
       case 'biped': {
@@ -439,6 +515,106 @@ export class Renderer {
         R(w * 0.55, h * 0.1, w * 0.16, h * 0.06, pal.accent);   // eye
         R(0, h * 0.28, w * 0.12, h * 0.34, pal.body);           // arms
         R(w * 0.88, h * 0.28, w * 0.12, h * 0.34, pal.body);
+        if (m.barter > 0) R(w * 0.9, h * 0.5, w * 0.36, h * 0.07, '#f0cf52');   // admiring gold
+        break;
+      }
+      case 'villager': {
+        const legH = h * 0.14;
+        R(w * 0.2, h - legH, w * 0.25, legH, pal.legs);
+        R(w * 0.55, h - legH, w * 0.25, legH, pal.legs);
+        R(w * 0.06, h * 0.27, w * 0.88, h - legH - h * 0.27, pal.body);   // robe
+        R(w * 0.1, 0, w * 0.8, h * 0.29, pal.head);
+        R(w * 0.1, 0, w * 0.8, h * 0.05, pal.accent);                    // hat
+        R(w * 0.86, h * 0.12, w * 0.16, h * 0.11, '#b0845e');            // the nose
+        R(w * 0.48, h * 0.085, w * 0.32, h * 0.03, '#3a2a1e');           // brow
+        R(w * 0.58, h * 0.12, w * 0.1, h * 0.04, '#2a6a3a');             // eye
+        R(w * 0.02, h * 0.4, w * 0.96, h * 0.09, pal.accent);            // folded arms
+        break;
+      }
+      case 'illager': {
+        const legH = h * 0.36;
+        const robe = m.def.item === 'robe';
+        R(w * 0.12, h - legH, w * 0.32, legH, pal.legs);
+        R(w * 0.56, h - legH, w * 0.32, legH, pal.legs);
+        R(w * 0.06, h * 0.27, w * 0.88, robe ? h * 0.66 : h * 0.38, pal.body);
+        if (robe) R(w * 0.44, h * 0.27, w * 0.12, h * 0.66, pal.accent);   // gold trim
+        R(w * 0.1, 0, w * 0.8, h * 0.29, pal.head);
+        R(w * 0.86, h * 0.12, w * 0.14, h * 0.11, '#7a7a6c');            // nose
+        R(w * 0.44, h * 0.075, w * 0.42, h * 0.035, '#2a2a2a');          // heavy brow
+        R(w * 0.56, h * 0.115, w * 0.12, h * 0.04, '#e8e8e0');           // pale eye
+        if (m.casting > 0) {
+          R(0, -h * 0.02, w * 0.12, h * 0.3, pal.body);                   // arms up, casting
+          R(w * 0.88, -h * 0.02, w * 0.12, h * 0.3, pal.body);
+        } else {
+          R(0, h * 0.29, w * 0.12, h * 0.32, pal.body);
+          R(w * 0.88, h * 0.29, w * 0.12, h * 0.32, pal.body);
+        }
+        if (m.def.item === 'crossbow') {
+          R(w * 0.8, h * 0.45, w * 0.55, h * 0.05, '#6b4c2b');
+          R(w * 1.22, h * 0.37, w * 0.08, h * 0.21, '#4a3a2a');
+        } else if (m.def.item === 'axe') {
+          R(w * 0.92, h * 0.22, w * 0.08, h * 0.42, '#6b4c2b');
+          R(w * 0.98, h * 0.2, w * 0.3, h * 0.13, pal.accent);
+        }
+        break;
+      }
+      case 'golem': {
+        const legH = h * 0.3;
+        const swing = Math.sin(m.bob) * h * 0.03;
+        R(w * 0.2, h - legH, w * 0.24, legH, pal.legs);
+        R(w * 0.56, h - legH, w * 0.24, legH, pal.legs);
+        R(w * 0.1, h * 0.2, w * 0.8, h * 0.52, pal.body);                 // chest
+        R(w * 0.32, 0, w * 0.4, h * 0.22, pal.head);                      // small head
+        R(w * 0.7, h * 0.08, w * 0.1, h * 0.1, '#a8a296');                // nose
+        R(w * 0.52, h * 0.06, w * 0.08, h * 0.035, '#b03030');            // red eye
+        R(-w * 0.04, h * 0.22 + swing, w * 0.16, h * 0.56, pal.legs);     // long arms
+        R(w * 0.88, h * 0.22 - swing, w * 0.16, h * 0.56, pal.legs);
+        R(w * 0.22, h * 0.3, w * 0.07, h * 0.26, pal.accent);             // vines
+        R(w * 0.64, h * 0.44, w * 0.06, h * 0.2, pal.accent);
+        break;
+      }
+      case 'snowman': {
+        ctx.strokeStyle = pal.accent;
+        ctx.lineWidth = Math.max(2, w * 0.07);
+        ctx.beginPath();
+        ctx.moveTo(w * 0.2, h * 0.43); ctx.lineTo(-w * 0.28, h * 0.3);
+        ctx.moveTo(w * 0.8, h * 0.43); ctx.lineTo(w * 1.28, h * 0.3);
+        ctx.stroke();
+        R(w * 0.06, h * 0.56, w * 0.88, h * 0.44, pal.body);             // lower snowball
+        R(w * 0.16, h * 0.3, w * 0.68, h * 0.28, pal.legs);              // upper snowball
+        R(w * 0.16, 0, w * 0.68, h * 0.3, pal.head);                     // pumpkin head
+        R(w * 0.48, h * 0.08, w * 0.12, h * 0.07, '#3a2210');
+        R(w * 0.68, h * 0.08, w * 0.12, h * 0.07, '#3a2210');
+        R(w * 0.46, h * 0.19, w * 0.36, h * 0.05, '#3a2210');
+        break;
+      }
+      case 'vex': {
+        const flap = Math.sin(m.bob * 4) * h * 0.15;
+        ctx.fillStyle = 'rgba(230,238,244,0.7)';
+        ctx.beginPath();
+        ctx.moveTo(w * 0.3, h * 0.35);
+        ctx.lineTo(-w * 0.7, h * 0.08 + flap);
+        ctx.lineTo(-w * 0.2, h * 0.62);
+        ctx.closePath(); ctx.fill();
+        R(w * 0.25, h * 0.35, w * 0.5, h * 0.4, pal.body);
+        R(w * 0.32, h * 0.72, w * 0.36, h * 0.2, pal.legs);              // wisp of a tail
+        R(w * 0.2, 0, w * 0.6, h * 0.36, pal.head);
+        R(w * 0.55, h * 0.12, w * 0.12, h * 0.07, '#3a4a6a');
+        R(w * 0.78, h * 0.12, w * 0.1, h * 0.5, '#c8ccd4');              // sword
+        R(w * 0.68, h * 0.55, w * 0.3, h * 0.05, '#6b4c2b');
+        break;
+      }
+      case 'ravager': {
+        const legH = h * 0.32;
+        R(w * 0.06, h - legH, w * 0.16, legH, pal.legs);
+        R(w * 0.3, h - legH, w * 0.14, legH, pal.legs);
+        R(w * 0.6, h - legH, w * 0.16, legH, pal.legs);
+        R(0, h * 0.18, w * 0.78, h - legH - h * 0.18, pal.body);
+        R(w * 0.64, h * 0.1, w * 0.36, h * 0.42, pal.head);
+        R(w * 0.9, h * 0.34, w * 0.12, h * 0.14, '#1e1c1a');             // snout
+        R(w * 0.7, 0, w * 0.06, h * 0.14, pal.accent);                   // horns
+        R(w * 0.84, h * 0.02, w * 0.06, h * 0.12, pal.accent);
+        R(w * 0.82, h * 0.2, w * 0.06, h * 0.05, '#e8d8a0');
         break;
       }
       case 'tall': {
@@ -575,7 +751,12 @@ export class Renderer {
         R(0, 0, w, h, pal.body);
     }
 
+    // The fuse flashes white faster and faster as it burns down.
+    if (fuse > 0 && Math.floor(m.fuse * (6 + fuse * 10)) % 2 === 0) R(0, 0, w, h, 'rgba(255,255,255,0.55)');
+
     ctx.restore();
+
+    if (m.onFire > 0) this.drawFlames(ctx, px, py, w, h, m.bob);
 
     if (m.hurtFlash > 0) {
       ctx.fillStyle = `rgba(255,60,50,${0.55 * (m.hurtFlash / 0.25)})`;
@@ -592,6 +773,126 @@ export class Renderer {
       ctx.fillStyle = '#d33b32';
       ctx.fillRect(bx + 1, by + 1, (bw - 2) * (m.health / m.maxHealth), SCALE * 0.12 - 2);
     }
+  }
+
+  /** Flickering flames over a burning mob's box. */
+  drawFlames(ctx, px, py, w, h, t) {
+    ctx.save();
+    const n = Math.max(3, Math.round(w / (SCALE * 0.25)));
+    for (let i = 0; i < n; i++) {
+      const fx = px + (i + 0.5) * (w / n);
+      const flick = 0.6 + 0.4 * Math.sin(t * 7 + i * 2.1);
+      const fh = h * 0.55 * flick;
+      ctx.fillStyle = i % 2 ? 'rgba(255,196,60,0.85)' : 'rgba(240,110,30,0.85)';
+      ctx.beginPath();
+      ctx.moveTo(fx - w / n * 0.6, py + h);
+      ctx.lineTo(fx, py + h - fh);
+      ctx.lineTo(fx + w / n * 0.6, py + h);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  /** Short-lived visuals: explosions, teleports, fangs, sonic booms and the like. */
+  drawEffect(ctx, e) {
+    if (e.t < 0) return;                          // fangs waiting their turn
+    const k = Math.min(1, e.t / e.life);          // 0 -> 1 over its life
+    const fade = 1 - k;
+    const x = e.x * SCALE;
+    const y = e.y * SCALE;
+    // Stable pseudo-random scatter per particle, so bursts don't shimmer.
+    const jitter = (i, s) => {
+      const h = Math.sin(i * 127.1 + s * 311.7) * 43758.5453;
+      return h - Math.floor(h) - 0.5;
+    };
+    const dots = (n, spread, rise, size, colour) => {
+      ctx.fillStyle = colour;
+      for (let i = 0; i < n; i++) {
+        const dx = jitter(i, 1) * spread * SCALE;
+        const dy = (jitter(i, 2) * spread - rise * k) * SCALE;
+        ctx.fillRect(x + dx - size / 2, y + dy - size / 2, size, size);
+      }
+    };
+
+    ctx.save();
+    switch (e.kind) {
+      case 'explosion': {
+        const r = (e.r ?? 3) * SCALE * (0.5 + k * 0.8);
+        const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+        g.addColorStop(0, `rgba(255,248,220,${0.95 * fade})`);
+        g.addColorStop(0.4, `rgba(240,150,60,${0.75 * fade})`);
+        g.addColorStop(1, 'rgba(90,90,90,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = fade * 0.6;
+        dots(14, (e.r ?? 3) * 1.4, 1, SCALE * 0.35, '#8a8a8a');
+        break;
+      }
+      case 'teleport':
+        ctx.globalAlpha = fade;
+        dots(12, 1.4, 1.2, SCALE * 0.14, '#c26af0');
+        break;
+      case 'fang': {
+        const up = Math.min(1, e.t / 0.18);
+        const down = e.t > 0.6 ? Math.max(0, 1 - (e.t - 0.6) / 0.3) : 1;
+        const fh = SCALE * 1.1 * up * down;
+        const gap = (e.snapped ? 0.04 : 0.28) * SCALE;
+        ctx.fillStyle = '#8a7a5a';
+        for (const side of [-1, 1]) {
+          ctx.beginPath();
+          ctx.moveTo(x + side * SCALE * 0.42, y);
+          ctx.lineTo(x + side * gap, y - fh);
+          ctx.lineTo(x + side * gap, y);
+          ctx.closePath(); ctx.fill();
+        }
+        ctx.fillStyle = '#e8e0c8';
+        ctx.fillRect(x - gap - 2, y - fh, 4 + gap * 2 > 6 ? 3 : 2, fh * 0.3);
+        break;
+      }
+      case 'sonic': {
+        const x2 = e.x2 * SCALE;
+        const y2 = e.y2 * SCALE;
+        const n = Math.max(2, Math.round(Math.hypot(x2 - x, y2 - y) / (SCALE * 0.9)));
+        ctx.strokeStyle = `rgba(58,216,200,${fade})`;
+        ctx.lineWidth = 2;
+        for (let i = 1; i <= n; i++) {
+          const t = i / n;
+          ctx.beginPath();
+          ctx.arc(x + (x2 - x) * t, y + (y2 - y) * t, SCALE * 0.3 * (1 + k), 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        break;
+      }
+      case 'ink':
+        ctx.globalAlpha = 0.75 * fade;
+        dots(16, 1.2 + k, 0, SCALE * 0.4, e.colour ?? '#10121c');
+        break;
+      case 'hearts':
+        ctx.globalAlpha = fade;
+        ctx.fillStyle = '#e03a3a';
+        ctx.font = `${Math.round(SCALE * 0.5)}px sans-serif`;
+        for (let i = 0; i < 3; i++) ctx.fillText('\u2665', x + (i - 1) * SCALE * 0.5, y - k * SCALE * 1.2 - i * 4);
+        break;
+      case 'smoke':
+        ctx.globalAlpha = 0.6 * fade;
+        dots(8, 0.8, 1, SCALE * 0.25, '#9a9a9a');
+        break;
+      case 'sparkle':
+        ctx.globalAlpha = fade;
+        dots(10, 1, 0.8, SCALE * 0.12, e.colour ?? '#ffffff');
+        break;
+      case 'puff':
+        ctx.globalAlpha = fade;
+        dots(6, 0.5, 0, SCALE * 0.12, '#f4f8fc');
+        break;
+      case 'totem':
+        ctx.globalAlpha = fade;
+        dots(18, 1.6, 1.5, SCALE * 0.15, '#e8c43a');
+        dots(12, 1.4, 1.8, SCALE * 0.12, '#5ad86a');
+        break;
+    }
+    ctx.restore();
   }
 
   drawProjectile(ctx, p) {
@@ -620,6 +921,19 @@ export class Renderer {
       g.addColorStop(1, 'rgba(226,97,28,0)');
       ctx.fillStyle = g;
       ctx.beginPath(); ctx.arc(0, 0, SCALE * 0.4, 0, Math.PI * 2); ctx.fill();
+    } else if (p.kind === 'snowball') {
+      ctx.fillStyle = '#f4f8fc';
+      ctx.beginPath(); ctx.arc(0, 0, SCALE * 0.13, 0, Math.PI * 2); ctx.fill();
+    } else if (p.kind === 'spit') {
+      ctx.fillStyle = 'rgba(236,236,224,0.9)';
+      ctx.beginPath(); ctx.arc(0, 0, SCALE * 0.09, 0, Math.PI * 2); ctx.fill();
+    } else if (p.kind === 'bullet') {
+      const g = ctx.createRadialGradient(0, 0, 0, 0, 0, SCALE * 0.28);
+      g.addColorStop(0, '#fffbe0');
+      g.addColorStop(0.6, '#e8d8a0');
+      g.addColorStop(1, 'rgba(216,200,232,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(0, 0, SCALE * 0.28, 0, Math.PI * 2); ctx.fill();
     } else {
       ctx.fillStyle = 'rgba(210,215,225,0.6)';
       ctx.beginPath(); ctx.arc(0, 0, SCALE * 0.2, 0, Math.PI * 2); ctx.fill();

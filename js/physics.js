@@ -1,6 +1,5 @@
-import { isSolid } from './blocks.js';
-
-// Shared AABB physics for anything that walks around: the player and every mob.
+// AABB physics for mobs. (The player has its own copy in player.js, because
+// the player can walk through doors and mobs can't.)
 // Bodies use the same convention throughout: `x` is centre-x, `y` is the top
 // edge, both in blocks.
 
@@ -13,7 +12,7 @@ export function boxOf(body) {
   };
 }
 
-/** True if the body's box overlaps any solid block. */
+/** True if the body's box overlaps any block that stops a mob. */
 export function collides(body, world) {
   const b = boxOf(body);
   const x0 = Math.floor(b.left);
@@ -23,7 +22,7 @@ export function collides(body, world) {
 
   for (let y = y0; y <= y1; y++) {
     for (let x = x0; x <= x1; x++) {
-      if (isSolid(world.get(x, y))) return true;
+      if (world.blocksMobAt(x, y)) return true;
     }
   }
   return false;
@@ -91,7 +90,7 @@ export function lineOfSight(world, x0, y0, x1, y1, maxDist = 24) {
   const steps = Math.ceil(dist * 2);
   for (let i = 1; i < steps; i++) {
     const t = i / steps;
-    if (isSolid(world.get(Math.floor(x0 + dx * t), Math.floor(y0 + dy * t)))) return false;
+    if (world.blocksMovementAt(Math.floor(x0 + dx * t), Math.floor(y0 + dy * t))) return false;
   }
   return true;
 }

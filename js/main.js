@@ -4,8 +4,9 @@ import {
 } from './config.js';
 import {
   AIR, CHEST, CRAFTING_TABLE, FURNACE, GRAVEL, OBSIDIAN, NETHER_PORTAL, END_PORTAL,
-  block, isBreakable, isSolid, dropOf,
+  CARVED_PUMPKIN, SNOW_BLOCK, IRON_BLOCK, TNT, block, isBreakable, isSolid, dropOf,
 } from './blocks.js';
+import { ignite, primeTnt, tickFires, tickTnt } from './fire.js';
 import { rollLoot } from './loot.js';
 import { World } from './world.js';
 import { Player } from './player.js';
@@ -16,12 +17,15 @@ import { HUD } from './hud.js';
 import { bakeAll } from './textures.js';
 import { BIOMES } from './biomes.js';
 import { Entities, Projectile, ballisticVelocity } from './entities.js';
+import { PROFESSIONS } from './mobs.js';
 import { portalOnSurface } from './worldgen.js';
 import { Minimap } from './minimap.js';
 import { RECIPES, fuelValue } from './recipes.js';
 import * as I from './items.js';
 
 const PORTAL_IDS = new Set([NETHER_PORTAL, END_PORTAL]);
+// Holding any of these keeps piglins friendly.
+const GOLD_ITEMS = new Set([I.GOLD_INGOT, I.GOLDEN_SWORD]);
 
 // survival -> creative -> spectator, cycled with G.
 export const MODES = ['survival', 'creative', 'spectator'];
@@ -42,6 +46,7 @@ class Game {
     this.world = this.getWorld(START_REALM);
 
     this.player = new Player(this.world, this.world.spawnPoint(this.world.spawnX));
+    this.player.onLethal = () => this.useTotem();
     this.inventory = new Inventory();
     this.inventory.giveStarter();
     this.mode = 'survival';
@@ -53,6 +58,7 @@ class Game {
     this.hover = null;           // block cell under the cursor, if in reach
     this.target = null;          // mob under the cursor, if in reach
     this.inspect = null;         // what the cursor is over, for the tooltip
+    this.trading = null;         // the villager whose trades are open
     this.structureCursor = new Map();   // realm:id -> which instance to visit next
     this.worldTime = START_PHASE * DAY_LENGTH;   // seconds into the current day
     this.timeFrozen = false;                     // hold the clock where it is
@@ -134,6 +140,7 @@ class Game {
     this.hud.refreshTime(this);
     this.hud.renderTooltip(this.inspect);
     this.hud.renderHealth(this.player, this.mode === 'survival');
+    this.hud.renderAir(this.player, this.mode === 'survival');
     this.hud.renderEffects(this.player);
     this.renderDebug();
 
@@ -145,13 +152,29 @@ class Game {
     if (!this.timeFrozen) this.worldTime = (this.worldTime + dt) % DAY_LENGTH;
     this.player.update(dt, this.intent);
     this.intent.jumpPressed = false;      // a buffered jump only fires once
+    tickFires(this.world, dt);
+    tickTnt(this.world, dt, (x, y, power) => this.explode(x, y, power));
     this.placeCooldown = Math.max(0, this.placeCooldown - dt);
     this.attackCooldown = Math.max(0, this.attackCooldown - dt);
     this.useCooldown = Math.max(0, this.useCooldown - dt);
 
+    const alive = !this.player.dead;
     this.player.updateVitals(dt, !this.vulnerable);
+    // Falls, lava and drowning kill from inside the player's own update.
+    if (alive && this.player.dead) this.onPlayerDeath(this.player.deathCause ?? undefined);
+
+    // The void kills in every mode, spectator included.
+    if (!this.player.dead && this.world.inVoid(this.player)) {
+      this.player.health = 0;
+      this.player.dead = true;
+      this.onPlayerDeath('Fell into the void');
+    }
     this.entities.enabled = this.mode !== 'spectator';
     this.entities.update(dt, this.entityContext());
+
+    // A trade ends if the villager does.
+    const v = this.trading;
+    if (this.hud.tradeOpen && (!v || v.dead || v.gone)) this.hud.toggleTrade(false);
 
     if (this.player.dead) {
       this.respawnTimer -= dt;
@@ -173,13 +196,91 @@ class Game {
       mobs: this.entities.mobs,
       playerVulnerable: this.vulnerable,
       night: this.isNight,
-      damagePlayer: (amount, fromX) => {
-        if (!this.vulnerable) return;
-        if (this.player.hurt(amount, fromX) && this.player.dead) this.onPlayerDeath();
+      daylight: this.dayLight,
+      lookedAt: this.inspect?.mob ?? null,          // an enderman reads this as a stare
+      holdingGold: GOLD_ITEMS.has(this.inventory.held.count > 0 ? this.inventory.held.id : AIR),
+      playerNoise: this.input.mouse.left || this.input.mouse.right,   // wardens hear digging
+      damagePlayer: (amount, fromX, attacker) => this.damagePlayer(amount, fromX, attacker),
+      killOrHurt: (mob, amount, fromX, attacker) => this.hitMob(mob, amount, fromX, attacker),
+      explode: (x, y, power, source, fiery) => this.explode(x, y, power, source, fiery),
+      ignite: (x, y) => ignite(this.world, x, y),
+      giveItem: (id, count, message) => {
+        this.inventory.add(id, count);
+        if (message) this.hud.announce(message);
       },
-      killOrHurt: (mob, amount, fromX) => this.hitMob(mob, amount, fromX),
-      fire: (mob, target) => this.mobFire(mob, target),
     };
+  }
+
+  damagePlayer(amount, fromX = null, attacker = null) {
+    if (!this.vulnerable) return;
+    if (!this.player.hurt(amount, fromX)) return;
+    if (this.player.dead) this.onPlayerDeath();
+    else this.entities.onPlayerHurt(attacker, this.entityContext());
+  }
+
+  /**
+   * A blast: breaks what it can within `power` blocks, then hurts and shoves
+   * everything within twice that, harder the closer it was. Obsidian and
+   * anything unbreakable shrug it off, chests keep their loot, and TNT caught
+   * in it goes off a moment later. A `fiery` blast (a ghast's) leaves fire.
+   */
+  explode(x, y, power, source = null, fiery = false) {
+    const world = this.world;
+    const r = Math.ceil(power);
+    for (let dy = -r - 1; dy <= r + 1; dy++) {
+      for (let dx = -r - 1; dx <= r + 1; dx++) {
+        const cx = Math.floor(x) + dx;
+        const cy = Math.floor(y) + dy;
+        if (Math.hypot(cx + 0.5 - x, cy + 0.5 - y) > power * (0.75 + Math.random() * 0.4)) continue;
+        const id = world.get(cx, cy);
+        if (id === TNT) { primeTnt(world, cx, cy, 0.4 + Math.random() * 0.8); continue; }
+        if (id === AIR || id === CHEST || !isBreakable(id) || block(id).hardness >= 5) continue;
+        world.set(cx, cy, AIR);
+      }
+    }
+    if (fiery) {
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.random() < 0.35) ignite(world, Math.floor(x) + dx, Math.floor(y) + dy);
+        }
+      }
+    }
+
+    const reach = power * 2;
+    const p = this.player;
+    const dp = Math.hypot(p.x - x, p.centerY - y);
+    if (dp < reach && !p.noclip) {
+      const f = 1 - dp / reach;
+      this.damagePlayer(Math.max(1, Math.round(power * 6 * f * f)), x, source);
+      p.vx += (Math.sign(p.x - x) || 1) * 14 * f;
+      p.vy = Math.min(p.vy, -10 * f);
+    }
+    for (const m of [...this.entities.mobs]) {
+      if (m.dead || m === source) continue;
+      const d = Math.hypot(m.x - x, m.centerY - y);
+      if (d >= reach) continue;
+      const f = 1 - d / reach;
+      this.hitMob(m, Math.max(1, Math.round(power * 6 * f * f)), x, source);
+      const k = 1 - (m.def.knockbackResist ?? 0);
+      m.vx += (Math.sign(m.x - x) || 1) * 12 * f * k;
+      m.vy = Math.min(m.vy, -9 * f * k);
+    }
+    this.entities.addEffect('explosion', x, y, { r: power });
+  }
+
+  /** A totem anywhere in the hotbar is used up to cheat death. */
+  useTotem() {
+    const slot = this.inventory.slots.find((s) => s.count > 0 && s.id === I.TOTEM_OF_UNDYING);
+    if (!slot) return false;
+    slot.count -= 1;
+    if (slot.count === 0) slot.id = AIR;
+    this.inventory.changed();
+    this.player.effects = {};
+    this.player.applyEffect('regen', 1.5, 10);
+    this.player.applyEffect('fireResist', true, 40);
+    this.entities.addEffect('totem', this.player.x, this.player.centerY);
+    this.hud.announce('Totem of Undying');
+    return true;
   }
 
   handleInput(dt) {
@@ -199,6 +300,7 @@ class Game {
       this.hud.togglePalette(false);
       this.hud.togglePack(false);
       this.hud.toggleCrafting(false);
+      this.hud.toggleTrade(false);
     }
 
     // While a creative panel is open the world shouldn't react to input.
@@ -318,6 +420,7 @@ class Game {
     if (mode === 'survival') this.hud.toggleBiomes(false);
     if (mode !== 'creative') this.hud.togglePalette(false);
     if (mode === 'spectator') this.hud.togglePack(false);
+    if (mode === 'spectator') this.hud.toggleTrade(false);
 
     // Leaving spectator inside solid rock would trap the player.
     if (mode !== 'spectator' && this.player.collides()) {
@@ -439,7 +542,7 @@ class Game {
         if (x < 1 || x >= world.width - 1) continue;
         for (let y = Math.ceil(yMin) + 2; y < Math.floor(yMax); y++) {
           if (world.get(x, y) !== AIR || world.get(x, y - 1) !== AIR) continue;
-          if (!isSolid(world.get(x, y + 1))) continue;
+          if (!world.blocksMovementAt(x, y + 1)) continue;
           return { x: x + 0.5, y: y - 1 };
         }
       }
@@ -651,9 +754,10 @@ class Game {
     return base + (this.player.effect('strength') ?? 0);
   }
 
-  hitMob(mob, amount, fromX) {
-    mob.hurt(amount, fromX);
-    if (!mob.dead) return;
+  /** Hit a mob; `attacker` is the player or another mob. Only the player's kills drop loot. */
+  hitMob(mob, amount, fromX, attacker = this.player) {
+    const killed = this.entities.hurtMob(mob, amount, fromX, attacker, this.entityContext());
+    if (!killed || attacker !== this.player) return;
     // Drops go straight to the inventory; there are no ground items yet.
     for (const d of mob.rollDrops()) this.inventory.add(d.id, d.count);
   }
@@ -664,14 +768,78 @@ class Game {
     this.hitMob(mob, this.attackDamage, this.player.x);
   }
 
-  mobFire(mob, target) {
-    const r = mob.def.ranged;
-    const gravity = r.kind === 'fireball' ? 0 : (r.kind === 'potion' ? 22 : 16);
-    const { vx, vy } = ballisticVelocity(
-      target.x - mob.x, target.centerY - mob.centerY, r.speed, gravity);
+  /**
+   * Right-click on a mob: trade with a villager, tame a wolf with a bone,
+   * barter gold with a piglin, or light a creeper. False if nothing applies,
+   * so the click falls through to placing a block.
+   */
+  interactMob(mob) {
+    const def = mob.def;
+    const held = this.inventory.held;
+    const id = held.count > 0 ? held.id : AIR;
 
-    this.entities.projectiles.push(
-      new Projectile(r.kind, this.world, mob.x, mob.centerY, vx, vy, { damage: r.damage }));
+    if (def.trades && mob.profession) {
+      const offers = PROFESSIONS[mob.profession].trades
+        .filter((o) => o.get.id !== undefined && o.give.every((g) => g.id !== undefined));
+      this.trading = mob;
+      this.hud.openTrade(mob.name, offers, (o) => this.trade(o));
+      return true;
+    }
+    if (def.tameWith && id === def.tameWith && !mob.owner && mob.anger !== this.player) {
+      this.inventory.remove(id, 1);
+      if (Math.random() < 1 / 3) {
+        this.entities.tame(mob, this.player);
+        this.hud.announce(`Tamed the ${mob.name.toLowerCase()}`);
+      } else {
+        this.entities.addEffect('smoke', mob.x, mob.y);
+      }
+      return true;
+    }
+    if (def.barters && id === I.GOLD_INGOT && mob.barter <= 0 && mob.anger !== this.player) {
+      this.inventory.remove(id, 1);
+      mob.barter = 3;
+      mob.target = null;
+      return true;
+    }
+    if (def.fuse && I.item(id)?.kind === 'igniter') {
+      mob.ignited = true;
+      return true;
+    }
+    return false;
+  }
+
+  trade(offer) {
+    const inv = this.inventory;
+    if (!inv.infinite && offer.give.some((g) => inv.total(g.id) < g.count)) return;
+    if (inv.roomFor(offer.get.id) < offer.get.count) return;
+    for (const g of offer.give) inv.remove(g.id, g.count);
+    inv.add(offer.get.id, offer.get.count);
+  }
+
+  /**
+   * A carved pumpkin set on the right blocks wakes up: two snow blocks make a
+   * snow golem, a T of four iron blocks an iron golem.
+   */
+  tryBuildGolem(x, y) {
+    const w = this.world;
+    const at = (dx, dy) => w.get(x + dx, y + dy);
+    let kind = null;
+    let cells = null;
+    if (at(0, 1) === SNOW_BLOCK && at(0, 2) === SNOW_BLOCK) {
+      kind = 'snow_golem';
+      cells = [[0, 0], [0, 1], [0, 2]];
+    } else if (at(0, 1) === IRON_BLOCK && at(0, 2) === IRON_BLOCK
+        && at(-1, 1) === IRON_BLOCK && at(1, 1) === IRON_BLOCK) {
+      kind = 'iron_golem';
+      cells = [[0, 0], [0, 1], [0, 2], [-1, 1], [1, 1]];
+    }
+    if (!kind) return;
+
+    for (const [dx, dy] of cells) w.set(x + dx, y + dy, AIR);
+    const golem = this.entities.spawn(w, kind, x + 0.5, 0, { playerBuilt: true });
+    golem.y = y + 3 - golem.h - 1e-3;
+    this.entities.addEffect('sparkle', golem.x, golem.centerY, { colour: '#ffffff' });
+    this.hud.announce(`${golem.name} built`);
   }
 
   /** Release a drawn bow toward the cursor. */
@@ -720,10 +888,10 @@ class Game {
     this.hud.announce(it.name);
   }
 
-  onPlayerDeath() {
+  onPlayerDeath(message = 'You died') {
     this.respawnTimer = 2.2;
     this.entities.projectiles.length = 0;
-    this.hud.announce('You died');
+    this.hud.announce(message);
   }
 
   respawnPlayer() {
@@ -817,7 +985,14 @@ class Game {
 
   updatePlacing() {
     if (!this.canInteract) return;
-    if (!this.input.mouse.right || !this.hover || this.placeCooldown > 0) return;
+    if (!this.input.mouse.right || this.placeCooldown > 0) return;
+
+    const mob = this.mobUnderCursor();
+    if (mob && this.interactMob(mob)) {
+      this.placeCooldown = 0.35;
+      return;
+    }
+    if (!this.hover) return;
 
     const { x, y } = this.hover;
 
@@ -826,7 +1001,7 @@ class Game {
 
     const held = this.inventory.held;
     if (held.count > 0 && I.item(held.id)?.kind === 'igniter') {
-      this.lightPortal(x, y);
+      if (!this.lightPortal(x, y)) this.useFlintAndSteel(x, y);
       return;
     }
 
@@ -848,6 +1023,22 @@ class Game {
 
     this.world.set(x, y, id);
     this.placeCooldown = this.creative ? 0.08 : 0.15;
+    if (id === CARVED_PUMPKIN) this.tryBuildGolem(x, y);
+  }
+
+  /**
+   * Flint and steel on anything but a portal frame: light TNT, or set fire to
+   * the clicked cell -- or, if that's a solid block, to the air on top of it.
+   */
+  useFlintAndSteel(x, y) {
+    const w = this.world;
+    const id = w.get(x, y);
+    if (id === TNT) {
+      primeTnt(w, x, y);
+    } else if (!ignite(w, x, y) && isSolid(id)) {
+      ignite(w, x, y - 1);
+    }
+    this.placeCooldown = 0.3;
   }
 
   /**
@@ -918,17 +1109,23 @@ class Game {
       data.opened = true;
     }
 
+    // Take whatever fits of each stack; a partial stack stays in the chest.
     const left = [];
-    let taken = 0;
+    const took = new Map();       // id -> count, merged across loot rolls
     for (const it of data.items) {
-      if (this.inventory.add(it.id, it.count)) taken += it.count;
-      else left.push(it);
+      const n = Math.min(it.count, this.inventory.roomFor(it.id));
+      if (n > 0) {
+        this.inventory.add(it.id, n);
+        took.set(it.id, (took.get(it.id) ?? 0) + n);
+      }
+      if (n < it.count) left.push({ id: it.id, count: it.count - n });
     }
     data.items = left;
     this.placeCooldown = 0.3;
 
-    if (taken > 0) {
-      this.hud.announce(left.length ? `Took ${taken} — chest still has items` : `Took ${taken} items`);
+    if (took.size > 0) {
+      const items = [...took].map(([id, count]) => ({ id, count }));
+      this.hud.showLoot(items, left.length ? 'Inventory full — chest still has items' : '');
     } else {
       this.hud.announce(left.length ? 'Inventory full' : 'Empty chest');
     }

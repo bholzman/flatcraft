@@ -1,5 +1,5 @@
 import { REALMS, LUSH_CAVES_AT, DEEP_DARK_AT, PLAYER_H } from './config.js';
-import { AIR, BEDROCK, isSolid, isLiquid, isDecoration } from './blocks.js';
+import { AIR, BEDROCK, FIRE, block, isSolid, isLiquid, isDecoration } from './blocks.js';
 import { BIOMES, LAYOUTS, layoutBands, bandIndexAt } from './biomes.js';
 import { generate } from './worldgen.js';
 
@@ -17,6 +17,7 @@ export class World {
     this.liquidLevel = spec.liquidLevel;
 
     this.grid = new Uint8Array(this.width * this.height);
+    this.trees = new Uint8Array(this.width * this.height);   // 1 = part of a generated tree
     this.surface = new Int32Array(this.width);   // topmost non-air y (live)
     this.ground = new Int32Array(this.width);    // generated terrain height (fixed)
     this.bands = layoutBands(LAYOUTS[realm], this.width);
@@ -25,10 +26,33 @@ export class World {
     this.portals = [];      // [{ x, y, to }] built by the generator
     this.structures = [];   // [{ id, name, x, y }] for the debug readout
     this.blockData = new Map();   // "x,y" -> chest contents, spawner type, ...
+    this.fires = new Map();       // "x,y" -> { x, y, age, life, wait }; see fire.js
+    this.primed = new Map();      // "x,y" -> lit TNT and its fuse
 
     generate(this);
 
     for (let x = 0; x < this.width; x++) this.recalcSurface(x);
+    // The generator writes fire straight into the grid (the Nether's eternal
+    // flames); register those so they burn like any other.
+    for (let i = 0; i < this.grid.length; i++) {
+      if (this.grid[i] === FIRE) this.track(i % this.width, Math.floor(i / this.width));
+    }
+    this.voidFloor = spec.voidDepth ? this.deepestBlock() + 1 + spec.voidDepth : this.height;
+  }
+
+  /** The lowest y holding anything at all -- the underside of the deepest island. */
+  deepestBlock() {
+    for (let y = this.height - 1; y >= 0; y--) {
+      for (let x = 0; x < this.width; x++) {
+        if (this.grid[this.idx(x, y)] !== AIR) return y;
+      }
+    }
+    return 0;
+  }
+
+  /** Whether a body has reached the void: past either side edge, or down to the floor. */
+  inVoid(body) {
+    return body.left < 0 || body.right > this.width || body.bottom >= this.voidFloor;
   }
 
   idx(x, y) {
@@ -51,8 +75,12 @@ export class World {
     if (!this.inBounds(x, y)) return false;
     // Replacing a block discards whatever was attached to it -- a broken chest
     // must not leave its loot behind for whatever is placed there next.
-    if (this.grid[this.idx(x, y)] !== id) this.blockData.delete(`${x},${y}`);
+    const was = this.grid[this.idx(x, y)];
+    if (was !== id) this.blockData.delete(`${x},${y}`);
     this.grid[this.idx(x, y)] = id;
+    this.trees[this.idx(x, y)] = 0;      // a placed log is a wall, not a tree
+    if (id === FIRE) this.track(x, y);
+    else if (was === FIRE) this.fires.delete(`${x},${y}`);
     this.recalcSurface(x);
     return true;
   }
@@ -71,8 +99,28 @@ export class World {
     if (this.inBounds(x, y)) this.grid[this.idx(x, y)] = id;
   }
 
-  isSolidAt(x, y) {
-    return isSolid(this.get(x, y));
+  /** Start keeping time for a fire in (x, y); fire.js decides what it does. */
+  track(x, y) {
+    this.fires.set(`${x},${y}`, { x, y, age: 0, life: 4 + Math.random() * 5, wait: Math.random() * 0.25 });
+  }
+
+  /** Generator write for trunks and crowns: solid, but bodies pass through. */
+  putTree(x, y, id) {
+    if (!this.inBounds(x, y)) return;
+    this.grid[this.idx(x, y)] = id;
+    this.trees[this.idx(x, y)] = 1;
+  }
+
+  /**
+   * Whether a body (the player, a mob, a projectile, a line of sight) is
+   * stopped by this cell. Generated trees are solid for building against but
+   * not for walking; a log the player places is an ordinary wall.
+   */
+  blocksMovementAt(x, y) {
+    // Past the side edges is void: nothing stops a body falling into it.
+    if (x < 0 || x >= this.width) return false;
+    if (!isSolid(this.get(x, y))) return false;
+    return !(this.inBounds(x, y) && this.trees[this.idx(x, y)]);
   }
 
   isLiquidAt(x, y) {
@@ -112,8 +160,8 @@ export class World {
     let floating = null;
     for (const x of cols) {
       for (let y = Math.max(0, y0 - 2); y <= y1 && y < this.height - 2; y++) {
-        if (isSolid(this.get(x, y)) || isSolid(this.get(x, y + 1))) continue;
-        if (isSolid(this.get(x, y + 2))) return { x: x + 0.5, y };
+        if (this.blocksMovementAt(x, y) || this.blocksMovementAt(x, y + 1)) continue;
+        if (this.blocksMovementAt(x, y + 2)) return { x: x + 0.5, y };
         if (!floating) floating = { x: x + 0.5, y };
       }
     }
@@ -164,19 +212,23 @@ export class World {
    */
   standingYAt(x, from = 0) {
     for (let y = from + 2; y < this.height - 1; y++) {
-      if (!isSolid(this.get(x, y))) continue;
-      // Headroom only has to be passable, not empty -- tall grass and flowers
-      // sit in the two cells above almost every grassy column.
+      if (!this.blocksMovementAt(x, y)) continue;
+      // Headroom only has to be passable, not empty -- tall grass, flowers and
+      // tree trunks sit in the two cells above many grassy columns.
       if (!this.isPassable(x, y - 1) || !this.isPassable(x, y - 2)) continue;
       return y - PLAYER_H;
     }
     return null;
   }
 
-  /** Nothing there to stand in the way: air or a decoration, but not liquid. */
+  /** Like blocksMovementAt, but for mobs, which can't get through doors. */
+  blocksMobAt(x, y) {
+    return this.blocksMovementAt(x, y) || !!block(this.get(x, y)).door;
+  }
+
+  /** Nothing there to stand in the way: air, a decoration or a tree, but not liquid. */
   isPassable(x, y) {
-    const id = this.get(x, y);
-    return id === AIR || isDecoration(id);
+    return !this.blocksMovementAt(x, y) && !isLiquid(this.get(x, y));
   }
 
   /**
@@ -187,7 +239,7 @@ export class World {
   viewpointAt(x) {
     const start = Math.max(0, Math.min(this.width - 1, x | 0));
 
-    // Step sideways if the obvious spot is inside a tree trunk or a pillar.
+    // Step sideways if the obvious spot is inside a pillar.
     for (let d = 0; d <= 24; d++) {
       for (const col of d === 0 ? [start] : [start - d, start + d]) {
         if (col < 0 || col >= this.width) continue;
@@ -215,7 +267,7 @@ export class World {
         if (col < 0 || col >= this.width) continue;
         const y = this.standingYAt(col, from);
         if (y === null) continue;
-        // Skip anything built on top of the terrain -- trees, pillars, portals.
+        // Skip anything built on top of the terrain -- pillars, portals, houses.
         if (Math.abs(y + PLAYER_H - this.ground[col]) > 1.5) continue;
         return { x: col + 0.5, y };
       }

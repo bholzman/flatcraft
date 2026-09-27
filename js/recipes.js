@@ -66,6 +66,8 @@ recipe('Building', [B.NETHER_BRICK_FENCE, 4], [[B.NETHER_BRICK, 6]], { grid: 3 }
 recipe('Building', [B.PURPUR_BLOCK, 4], [[B.CHORUS_FLOWER, 4]]);
 recipe('Building', [B.PURPUR_PILLAR, 1], [[B.PURPUR_BLOCK, 2]]);
 recipe('Building', [B.END_STONE_BRICKS, 4], [[B.END_STONE, 4]]);
+recipe('Building', [B.IRON_BLOCK, 1], [[I.IRON_INGOT, 9]], { grid: 3 });
+recipe('Building', [I.IRON_INGOT, 9], [[B.IRON_BLOCK, 1]]);
 
 // ---- snow and ice ----
 recipe('Snow', [B.SNOW_BLOCK, 1], [[I.SNOWBALL, 4]]);
@@ -102,6 +104,7 @@ recipe('Misc', [B.RED_WOOL, 1], [[B.WHITE_WOOL, 1], [I.REDSTONE, 1]]);
 recipe('Misc', [B.HAY_BALE, 1], [[B.WHEAT, 9]], { grid: 3 });
 recipe('Misc', [B.COBWEB, 1], [[I.STRING, 5]]);
 recipe('Misc', [B.RAIL, 8], [[I.IRON_INGOT, 6], [I.STICK, 1]], { grid: 3 });
+recipe('Misc', [B.CARVED_PUMPKIN, 1], [[B.PUMPKIN, 1]]);
 // Brewing has no stand of its own here, so potions are crafting-table recipes
 // built from a glass bottle's worth of glass plus the usual reagents.
 recipe('Brewing', [I.POTION_HEALING, 1], [[B.GLASS, 1], [B.GLOWSTONE, 1], [I.SPIDER_EYE, 1]], { grid: 3 });

@@ -1,7 +1,7 @@
 import { AIR, PLACEABLE, block, isLiquid, isDecoration } from './blocks.js';
 import * as I from './items.js';
 import { BIOMES, LAYOUTS } from './biomes.js';
-import { phaseName, clockAt } from './config.js';
+import { phaseName, clockAt, MAX_AIR } from './config.js';
 import { RECIPES, CATEGORIES } from './recipes.js';
 import { swatchDataURL } from './textures.js';
 import { HOTBAR_SIZE, STORAGE_SIZE } from './inventory.js';
@@ -17,6 +17,7 @@ export class HUD {
     this.debugEl = document.getElementById('debug');
     this.toastEl = document.getElementById('toast');
     this.healthEl = document.getElementById('health');
+    this.airEl = document.getElementById('air');
     this.effectsEl = document.getElementById('effects');
     this.modeEl = document.getElementById('mode');
     this.biomesEl = document.getElementById('biomes');
@@ -24,6 +25,7 @@ export class HUD {
     this.packEl = document.getElementById('pack');
     this.tipEl = document.getElementById('tooltip');
     this.craftEl = document.getElementById('crafting');
+    this.tradeEl = document.getElementById('trading');
     this.toastTimer = null;
     this.showDebug = false;
     this.debugEl.classList.add('hidden');
@@ -33,12 +35,14 @@ export class HUD {
     this.buildBiomePanel();
     this.buildPalette();
     this.buildCrafting();
+    this.buildTrading();
 
-    this.inventory.onChange = () => { this.renderHotbar(); this.renderPack(); };
+    this.inventory.onChange = () => { this.renderHotbar(); this.renderPack(); this.renderTrade(); };
     this.renderHotbar();
     this.renderPack();
     this.renderMode();
     this.lastHearts = -1;
+    this.lastAir = -1;
   }
 
   // ---- hotbar ----
@@ -116,7 +120,12 @@ export class HUD {
   togglePack(force) {
     const show = force ?? this.packEl.classList.contains('hidden');
     this.packEl.classList.toggle('hidden', !show);
-    if (show) { this.toggleBiomes(false); this.togglePalette(false); this.toggleCrafting(false); }
+    if (show) {
+      this.toggleBiomes(false);
+      this.togglePalette(false);
+      this.toggleCrafting(false);
+      this.toggleTrade(false);
+    }
   }
 
   // ---- crafting ----
@@ -243,7 +252,137 @@ export class HUD {
       this.toggleBiomes(false);
       this.togglePalette(false);
       this.togglePack(false);
+      this.toggleTrade(false);
       this.refreshCrafting(this.game);
+    }
+  }
+
+  // ---- trading ----
+
+  buildTrading() {
+    this.tradeTitle = this.tradeEl.querySelector('h2');
+    this.tradeList = this.tradeEl.querySelector('.body');
+    this.tradeRows = [];
+    this.tradeEl.querySelector('.close').addEventListener('click', () => this.toggleTrade(false));
+  }
+
+  /**
+   * Show a villager's offers. Each offer is `{ give: [{ id, count }], get: { id, count } }`;
+   * `onTrade(offer)` does the actual inventory transfer.
+   */
+  openTrade(title, offers, onTrade) {
+    this.tradeTitle.textContent = title;
+    this.tradeOnTrade = onTrade;
+    this.tradeList.replaceChildren();
+
+    this.tradeRows = offers.map((offer) => {
+      const row = document.createElement('div');
+      row.className = 'trade-row';
+
+      const give = document.createElement('div');
+      give.className = 'craft-needs';
+
+      const arrow = document.createElement('span');
+      arrow.className = 'trade-arrow';
+      arrow.textContent = '→';
+
+      const get = document.createElement('div');
+      get.className = 'craft-result';
+      const img = document.createElement('img');
+      img.src = swatchDataURL(offer.get.id);
+      img.alt = '';
+      const name = document.createElement('span');
+      name.className = 'craft-name';
+      name.textContent = I.nameOf(offer.get.id);
+      if (offer.get.count > 1) {
+        const n = document.createElement('b');
+        n.textContent = ` x${offer.get.count}`;
+        name.appendChild(n);
+      }
+      // Why a row is greyed out, spelled out rather than hidden in a tooltip.
+      const why = document.createElement('span');
+      why.className = 'trade-why';
+      const label = document.createElement('div');
+      label.className = 'trade-label';
+      label.append(name, why);
+      get.append(img, label);
+
+      const button = document.createElement('button');
+      button.className = 'chip craft-btn';
+      button.textContent = 'Trade';
+      button.addEventListener('click', () => {
+        this.tradeOnTrade?.(offer);
+        this.renderTrade();
+      });
+
+      row.append(give, arrow, get, button);
+      this.tradeList.appendChild(row);
+      return { offer, row, give, button, why };
+    });
+
+    // Shown when nothing is affordable, so an all-grey panel explains itself.
+    this.tradeHint = document.createElement('p');
+    this.tradeHint.className = 'panel-empty trade-hint hidden';
+    this.tradeHint.textContent = 'Nothing you can afford yet. Sell this villager what it asks for to '
+      + 'earn emeralds, or mine emerald ore deep down in the deepslate.';
+    this.tradeList.prepend(this.tradeHint);
+
+    if (!offers.length) {
+      const empty = document.createElement('p');
+      empty.className = 'panel-empty';
+      empty.textContent = 'Nothing to trade right now.';
+      this.tradeList.appendChild(empty);
+    }
+
+    this.toggleTrade(true);
+  }
+
+  /** Refresh have/need chips and which Trade buttons are live. */
+  renderTrade() {
+    if (!this.tradeRows || !this.tradeOpen) return;
+    const inv = this.inventory;
+
+    for (const entry of this.tradeRows) {
+      const { give, get } = entry.offer;
+      const blockers = [];
+
+      // Ingredient chips carry have/need, the same way the crafting list does.
+      entry.give.innerHTML = give.map((g) => {
+        const have = inv.total(g.id);
+        const ok = inv.infinite || have >= g.count;
+        if (!ok) blockers.push(`need ${g.count - have} more ${I.nameOf(g.id)}`);
+        return `<span class="ing ${ok ? '' : 'short'}" title="${I.nameOf(g.id)}">`
+          + `<img src="${swatchDataURL(g.id)}" alt="">`
+          + `${have}/${g.count}</span>`;
+      }).join('');
+
+      if (!inv.infinite && inv.roomFor(get.id) < get.count) blockers.push('inventory full');
+
+      const ready = blockers.length === 0;
+      entry.row.classList.toggle('ready', ready);
+      entry.button.disabled = !ready;
+      entry.button.title = blockers.join(', ') || `Trade for ${I.nameOf(get.id)}`;
+      entry.why.textContent = ready ? '' : blockers.join(', ');
+    }
+    const none = this.tradeRows.length > 0 && this.tradeRows.every((e) => e.button.disabled);
+    this.tradeHint?.classList.toggle('hidden', !none);
+  }
+
+  get tradeOpen() {
+    return !this.tradeEl.classList.contains('hidden');
+  }
+
+  toggleTrade(force) {
+    const show = force ?? !this.tradeOpen;
+    this.tradeEl.classList.toggle('hidden', !show);
+    if (show) {
+      this.toggleBiomes(false);
+      this.togglePalette(false);
+      this.togglePack(false);
+      this.toggleCrafting(false);
+      this.renderTrade();
+    } else {
+      this.tradeOnTrade = null;
     }
   }
 
@@ -423,21 +562,98 @@ export class HUD {
   buildPalette() {
     const grid = document.createElement('div');
     grid.className = 'grid';
+    this.paletteGrid = grid;
 
-    for (const id of [...PLACEABLE, ...I.ALL_ITEMS]) {
+    this.paletteCells = [...PLACEABLE, ...I.ALL_ITEMS].map((id, index) => {
+      const name = I.nameOf(id);
       const cell = document.createElement('button');
       cell.className = 'cell';
-      cell.title = I.nameOf(id);
-      cell.innerHTML = `<img src="${swatchDataURL(id)}" alt=""><span>${I.nameOf(id)}</span>`;
+      cell.title = name;
+      cell.innerHTML = `<img src="${swatchDataURL(id)}" alt=""><span>${name}</span>`;
       cell.addEventListener('click', () => {
         this.inventory.setSelected(id, I.stackSize(id));
-        this.announce(I.nameOf(id));
+        this.announce(name);
+        // Back to the search box, so the next keystroke searches rather than
+        // reaching the game's key bindings through the focused button.
+        this.paletteSearch.focus();
       });
       grid.appendChild(cell);
+      return { el: cell, index, name: name.toLowerCase() };
+    });
+
+    // The search bar sits outside the scrolling body so it never scrolls away.
+    const bar = document.createElement('div');
+    bar.className = 'palette-bar';
+    this.paletteSearch = document.createElement('input');
+    this.paletteSearch.type = 'search';
+    this.paletteSearch.className = 'palette-search';
+    this.paletteSearch.placeholder = 'Search blocks and items';
+    this.paletteSearch.spellcheck = false;
+    this.paletteSearch.autocomplete = 'off';
+    this.paletteCount = document.createElement('span');
+    this.paletteCount.className = 'craft-stations';
+    bar.append(this.paletteSearch, this.paletteCount);
+
+    // Keys typed here are text, not game input: Input listens on window, so
+    // stopping the keydown here keeps "g" from cycling the mode and so on.
+    // Escape still closes the palette, and Enter takes the first match.
+    this.paletteSearch.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        this.togglePalette(false);
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        this.paletteCells.find((c) => !c.el.classList.contains('hidden'))?.el.click();
+      }
+    });
+    this.paletteSearch.addEventListener('input', () => this.filterPalette());
+
+    this.paletteEmpty = document.createElement('p');
+    this.paletteEmpty.className = 'panel-empty hidden';
+
+    const body = this.paletteEl.querySelector('.body');
+    body.before(bar);
+    body.append(grid, this.paletteEmpty);
+    this.paletteEl.querySelector('.close').addEventListener('click', () => this.togglePalette(false));
+    this.filterPalette();
+  }
+
+  /**
+   * Live filter: every word of the query has to appear in the name. Matches
+   * where the name, or one of its words, starts with the query come first --
+   * "oak" lists Oak Log before Dark Oak Planks.
+   */
+  filterPalette() {
+    const query = this.paletteSearch.value.trim().toLowerCase();
+    const words = query.split(/\s+/).filter(Boolean);
+    const total = this.paletteCells.length;
+
+    if (!words.length) {
+      for (const c of this.paletteCells) c.el.classList.remove('hidden');
+      this.paletteGrid.append(...this.paletteCells.map((c) => c.el));   // original order
+      this.paletteEmpty.classList.add('hidden');
+      this.paletteCount.textContent = `${total} blocks & items`;
+      return;
     }
 
-    this.paletteEl.querySelector('.body').appendChild(grid);
-    this.paletteEl.querySelector('.close').addEventListener('click', () => this.togglePalette(false));
+    const rank = (name) => {
+      if (name.startsWith(query)) return 0;
+      if (name.split(/\s+/).some((w) => w.startsWith(words[0]))) return 1;
+      return 2;
+    };
+    const hits = [];
+    for (const c of this.paletteCells) {
+      const hit = words.every((w) => c.name.includes(w));
+      c.el.classList.toggle('hidden', !hit);
+      if (hit) hits.push({ c, r: rank(c.name) });
+    }
+    hits.sort((a, b) => a.r - b.r || a.c.index - b.c.index);
+    this.paletteGrid.prepend(...hits.map((h) => h.c.el));
+
+    this.paletteEmpty.classList.toggle('hidden', hits.length > 0);
+    this.paletteEmpty.textContent = `No blocks match "${this.paletteSearch.value.trim()}"`;
+    this.paletteCount.textContent = `${hits.length} of ${total}`;
   }
 
   toggleBiomes(force) {
@@ -449,20 +665,31 @@ export class HUD {
       this.refreshTime(this.game);
       this.togglePalette(false);
       this.togglePack(false);
+      this.toggleTrade(false);
     }
   }
 
   togglePalette(force) {
     const show = force ?? this.paletteEl.classList.contains('hidden');
     this.paletteEl.classList.toggle('hidden', !show);
-    if (show) { this.toggleBiomes(false); this.togglePack(false); }
+    if (show) {
+      this.toggleBiomes(false);
+      this.togglePack(false);
+      this.toggleCrafting(false);
+      this.toggleTrade(false);
+      this.paletteSearch.focus();
+      this.paletteSearch.select();
+    } else {
+      this.paletteSearch.blur();
+    }
   }
 
   anyPanelOpen() {
     return !this.biomesEl.classList.contains('hidden')
       || !this.paletteEl.classList.contains('hidden')
       || !this.packEl.classList.contains('hidden')
-      || !this.craftEl.classList.contains('hidden');
+      || !this.craftEl.classList.contains('hidden')
+      || this.tradeOpen;
   }
 
   // ---- health & effects ----
@@ -488,6 +715,23 @@ export class HUD {
       html += `<span class="heart ${full ? 'full' : isHalf ? 'half' : 'empty'}">&#9829;</span>`;
     }
     this.healthEl.innerHTML = html;
+  }
+
+  /** Ten bubbles of breath, shown only while some of it has been used. */
+  renderAir(player, show) {
+    const bubbles = Math.ceil((player.air / MAX_AIR) * 10);
+    const visible = show && player.air < MAX_AIR;
+    const key = visible ? bubbles : -1;
+    if (key === this.lastAir) return;
+    this.lastAir = key;
+
+    this.airEl.classList.toggle('hidden', !visible);
+    if (!visible) return;
+    let html = '';
+    for (let i = 0; i < 10; i++) {
+      html += `<span class="bubble ${i < bubbles ? 'full' : 'empty'}"></span>`;
+    }
+    this.airEl.innerHTML = html;
   }
 
   renderEffects(player) {
@@ -605,9 +849,38 @@ export class HUD {
   /** Brief centred message, e.g. when the player changes realm. */
   announce(text) {
     this.toastEl.textContent = text;
+    this.showToast(2200);
+  }
+
+  /** What just went into the inventory, one icon row per item, plus an optional note. */
+  showLoot(items, note = '') {
+    this.toastEl.replaceChildren();
+    for (const { id, count } of items) {
+      const row = document.createElement('div');
+      row.className = 'loot-row';
+      const img = document.createElement('img');
+      img.className = 'swatch';
+      img.alt = '';
+      img.src = swatchDataURL(id);
+      const label = document.createElement('span');
+      label.textContent = `${I.nameOf(id)} x${count}`;
+      row.append(img, label);
+      this.toastEl.appendChild(row);
+    }
+    if (note) {
+      const el = document.createElement('div');
+      el.className = 'loot-note';
+      el.textContent = note;
+      this.toastEl.appendChild(el);
+    }
+    // Long enough to read the list, not so long it lingers.
+    this.showToast(Math.min(6000, 2600 + items.length * 500));
+  }
+
+  showToast(ms) {
     this.toastEl.classList.add('show');
     clearTimeout(this.toastTimer);
-    this.toastTimer = setTimeout(() => this.toastEl.classList.remove('show'), 2200);
+    this.toastTimer = setTimeout(() => this.toastEl.classList.remove('show'), ms);
   }
 
   toggleDebug() {

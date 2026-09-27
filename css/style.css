@@ -165,10 +165,31 @@ html, body {
 .heart.half  { color: #e03a3a; opacity: 0.55; }
 .heart.empty { color: #2a2a30; }
 
+#air {
+  position: absolute;
+  left: 50%;
+  bottom: 100px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 4px;
+}
+
+#air.hidden { display: none; }
+
+.bubble {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 2px solid #cfe6ff;
+  background: radial-gradient(circle at 35% 35%, #ffffff 0 18%, #6fb4f0 20%);
+}
+
+.bubble.empty { visibility: hidden; }
+
 #effects {
   position: absolute;
   left: 50%;
-  bottom: 104px;
+  bottom: 126px;
   transform: translateX(-50%);
   display: flex;
   gap: 5px;
@@ -440,6 +461,83 @@ h4.section:not(:first-child) { margin-top: 20px; }
 
 h4.section.hidden { display: none; }
 
+/* ---- Trading ---- */
+
+.trade-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1.3fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 6px;
+  border-radius: 4px;
+  opacity: 0.45;
+}
+
+.trade-row.ready { opacity: 1; }
+
+.trade-label {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.trade-why {
+  font-size: 10px;
+  color: #e89a8a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.trade-why:empty { display: none; }
+
+.trade-hint { margin: 2px 6px 8px; }
+.trade-row:hover { background: #20202a; }
+
+.trade-arrow {
+  font-size: 14px;
+  color: #d9b877;
+}
+
+.panel-empty {
+  margin: 18px 0;
+  font-size: 12px;
+  text-align: center;
+  opacity: 0.6;
+}
+
+.panel-empty.hidden { display: none; }
+
+/* ---- Block palette search ---- */
+
+.palette-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #2c2c36;
+}
+
+.palette-search {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--ui-text);
+  background: #262630;
+  border: 1px solid #363642;
+  border-radius: 4px;
+  outline: none;
+}
+
+.palette-search::placeholder { color: var(--ui-text); opacity: 0.4; }
+.palette-search:focus { border-color: #d9b877; }
+
+.palette-bar .craft-stations { white-space: nowrap; }
+
+.cell.hidden { display: none; }
+
 .pack-grid {
   display: grid;
   grid-template-columns: repeat(9, 1fr);
@@ -500,6 +598,29 @@ h4.section.hidden { display: none; }
 #toast.show {
   opacity: 1;
   transform: translate(-50%, 0);
+}
+
+/* Chest loot: an icon row per item taken. */
+#toast .loot-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+  line-height: 1.7;
+  white-space: nowrap;
+}
+
+#toast .loot-row .swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 2px;
+  image-rendering: pixelated;
+}
+
+#toast .loot-note {
+  margin-top: 6px;
+  font-size: 13px;
+  opacity: 0.75;
 }
 
 /* ---- Hotbar ---- */

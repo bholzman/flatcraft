@@ -185,7 +185,7 @@ function fillLiquid(world, level, liquidId) {
 
 // ---------------------------------------------------------------- features
 
-/** Rounded clump of `id`, with a ragged outer ring so crowns aren't circles. */
+/** Rounded tree crown of `id`, with a ragged outer ring so it isn't a circle. */
 function blob(world, cx, cy, r, id, ragged = true) {
   const rr = (r + 0.5) * (r + 0.5);
   for (let dy = -r - 1; dy <= r + 1; dy++) {
@@ -193,7 +193,7 @@ function blob(world, cx, cy, r, id, ragged = true) {
       const d2 = dx * dx + dy * dy;
       if (d2 > rr + 2.5) continue;
       if (ragged && d2 > rr && hash2(cx + dx, cy + dy, 3) < 0.45) continue;
-      if (world.get(cx + dx, cy + dy) === B.AIR) world.put(cx + dx, cy + dy, id);
+      if (world.get(cx + dx, cy + dy) === B.AIR) world.putTree(cx + dx, cy + dy, id);
     }
   }
 }
@@ -206,12 +206,14 @@ function hangVines(world, x, y, id, rand, maxLen = 4) {
   }
 }
 
+// Every cell a tree writes is marked as tree, so bodies walk through it; see
+// World.blocksMovementAt.
 function placeTree(world, x, top, f, rand) {
   const h = f.minH + Math.floor(rand() * (f.maxH - f.minH + 1));
   const trunkTop = top - h;
 
   const trunk = (tx = x, from = 1, to = h) => {
-    for (let i = from; i <= to; i++) world.put(tx, top - i, f.log);
+    for (let i = from; i <= to; i++) world.putTree(tx, top - i, f.log);
   };
 
   switch (f.shape) {
@@ -222,19 +224,19 @@ function placeTree(world, x, top, f, rand) {
         const r = Math.max(1, Math.round((h - 2 - i) / 2.4));
         for (let dx = -r; dx <= r; dx++) {
           if (dx === 0 && y > trunkTop + 1) continue;
-          if (world.get(x + dx, y) === B.AIR) world.put(x + dx, y, f.leaves);
+          if (world.get(x + dx, y) === B.AIR) world.putTree(x + dx, y, f.leaves);
         }
       }
-      world.put(x, trunkTop - 1, f.leaves);
+      world.putTree(x, trunkTop - 1, f.leaves);
       break;
     }
     case 'acacia': {
       const lean = rand() < 0.5 ? -1 : 1;
-      for (let i = 1; i <= h; i++) world.put(x + (i > h / 2 ? lean : 0), top - i, f.log);
+      for (let i = 1; i <= h; i++) world.putTree(x + (i > h / 2 ? lean : 0), top - i, f.log);
       const cx = x + lean;
       for (let dx = -3; dx <= 3; dx++) {
-        world.put(cx + dx, trunkTop - 1, f.leaves);
-        if (Math.abs(dx) <= 2) world.put(cx + dx, trunkTop - 2, f.leaves);
+        world.putTree(cx + dx, trunkTop - 1, f.leaves);
+        if (Math.abs(dx) <= 2) world.putTree(cx + dx, trunkTop - 2, f.leaves);
       }
       break;
     }
@@ -259,30 +261,30 @@ function placeTree(world, x, top, f, rand) {
       blob(world, x, trunkTop + 1, 2, f.leaves);
       for (const dx of [-2, -1, 1, 2]) {         // prop roots
         for (let i = 0; i < Math.abs(dx); i++) {
-          if (world.get(x + dx, top - i) === B.AIR) world.put(x + dx, top - i, f.log);
+          if (world.get(x + dx, top - i) === B.AIR) world.putTree(x + dx, top - i, f.log);
         }
       }
       break;
     }
     case 'nether': {
       trunk();
-      for (let dx = -2; dx <= 2; dx++) world.put(x + dx, trunkTop - 1, f.leaves);
-      for (const dx of [-2, 2]) world.put(x + dx, trunkTop, f.leaves);
+      for (let dx = -2; dx <= 2; dx++) world.putTree(x + dx, trunkTop - 1, f.leaves);
+      for (const dx of [-2, 2]) world.putTree(x + dx, trunkTop, f.leaves);
       blob(world, x, trunkTop - 1, 2, f.leaves);
       break;
     }
     case 'chorus': {
       let cx = x;
       for (let i = 1; i <= h; i++) {
-        world.put(cx, top - i, f.log);
+        world.putTree(cx, top - i, f.log);
         if (i > 2 && rand() < 0.3) {             // branch sideways
           const dir = rand() < 0.5 ? -1 : 1;
-          world.put(cx + dir, top - i, f.log);
-          world.put(cx + dir * 2, top - i, f.leaves);
+          world.putTree(cx + dir, top - i, f.log);
+          world.putTree(cx + dir * 2, top - i, f.leaves);
         }
         if (rand() < 0.25) cx += rand() < 0.5 ? -1 : 1;
       }
-      world.put(cx, top - h - 1, f.leaves);
+      world.putTree(cx, top - h - 1, f.leaves);
       break;
     }
     default: {                                    // oak / birch / generic
