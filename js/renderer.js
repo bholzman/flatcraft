@@ -1,5 +1,8 @@
-import { TILE, ZOOM, CAMERA_SMOOTH, LUSH_CAVES_AT, DEEP_DARK_AT } from './config.js';
+import {
+  TILE, ZOOM, CAMERA_SMOOTH, LUSH_CAVES_AT, DEEP_DARK_AT, SWING_IMPACT, HIT_FLASH,
+} from './config.js';
 import { AIR, BLOCKS } from './blocks.js';
+import { item } from './items.js';
 import { BIOMES, bandIndexAt } from './biomes.js';
 import { textures, shadowMasks } from './textures.js';
 
@@ -24,6 +27,16 @@ function rgbCss([r, g, b]) {
   return `rgb(${r},${g},${b})`;
 }
 
+const lerp = (a, b, t) => a + (b - a) * t;
+const easeOut = (t) => 1 - (1 - t) * (1 - t);
+const easeIn = (t) => t * t * t;
+const easeInOut = (t) => (t < 0.5 ? 2 * t * t : 1 - 2 * (1 - t) * (1 - t));
+
+// Items held by a handle: their icons run handle bottom-left to tip top-right,
+// so they can be gripped and swung like a real tool.
+const GRIPPED = new Set(['sword', 'pickaxe', 'stick', 'arrow']);
+const GRIP_ANGLE = -0.55;         // tool leans this far up from the forearm
+
 export class Renderer {
   constructor(canvas) {
     this.canvas = canvas;
@@ -31,6 +44,7 @@ export class Renderer {
     this.camera = { x: 0, y: 0 };
     this.dpr = 1;
     this.glowCache = new Map();
+    this.flashMasks = {};
     this.resize();
     window.addEventListener('resize', () => this.resize());
   }
@@ -60,6 +74,24 @@ export class Renderer {
 
     this.glowCache.set(hex, sprite);
     return sprite;
+  }
+
+  /** White silhouette of a texture, for the flash when a block is struck. */
+  flashMaskFor(id) {
+    let mask = this.flashMasks[id];
+    if (mask || !textures[id]) return mask ?? null;
+
+    const src = textures[id];
+    mask = document.createElement('canvas');
+    mask.width = src.width;
+    mask.height = src.height;
+    const g = mask.getContext('2d');
+    g.drawImage(src, 0, 0);
+    g.globalCompositeOperation = 'source-in';
+    g.fillStyle = '#fff';
+    g.fillRect(0, 0, mask.width, mask.height);
+    this.flashMasks[id] = mask;
+    return mask;
   }
 
   resize() {
@@ -241,9 +273,11 @@ export class Renderer {
     const lights = this.drawTerrain(ctx, world, light);
     for (const m of state.entities.mobs) this.drawMob(ctx, m, lights);
     for (const p of state.entities.projectiles) this.drawProjectile(ctx, p);
-    this.drawPlayer(ctx, player);
+    const held = state.inventory.held;
+    this.drawPlayer(ctx, player, held.count > 0 ? held.id : AIR);
     this.drawLights(ctx, lights, player);
-    if (hover) this.drawHighlight(ctx, hover, mining);
+    if (hover) this.drawHighlight(ctx, world, player, hover, mining, light);
+    this.drawParticles(ctx, state.particles.list);
 
     ctx.restore();
   }
@@ -320,14 +354,7 @@ export class Renderer {
           continue;                                     // bright blocks ignore depth shading
         }
 
-        // Depth shading underground, nightfall over everything. Taking the
-        // greater of the two keeps a shallow cave from looking brighter at
-        // midnight than the surface above it.
-        const depth = y - world.ground[x];
-        const shade = Math.max(
-          depth > 0 ? Math.min(0.72, depth / 110) : 0,
-          night * 0.62,
-        );
+        const shade = this.shadeAt(world, x, y, night);
         // Shade through the block's own silhouette, so a tuft of grass darkens
         // without the empty rest of its cell turning into a black square.
         if (shade > 0.02 && shadowMasks[id]) {
@@ -338,6 +365,16 @@ export class Renderer {
       }
     }
     return lights;
+  }
+
+  /**
+   * Depth shading underground, nightfall over everything. Taking the greater
+   * of the two keeps a shallow cave from looking brighter at midnight than the
+   * surface above it.
+   */
+  shadeAt(world, x, y, night) {
+    const depth = y - world.ground[x];
+    return Math.max(depth > 0 ? Math.min(0.72, depth / 110) : 0, night * 0.62);
   }
 
   drawLights(ctx, lights, player) {
@@ -363,7 +400,7 @@ export class Renderer {
     ctx.restore();
   }
 
-  drawPlayer(ctx, p) {
+  drawPlayer(ctx, p, heldId) {
     ctx.save();
     // A spectator is passing through the world, not standing in it.
     if (p.noclip) ctx.globalAlpha = 0.45;
@@ -381,8 +418,11 @@ export class Renderer {
     ctx.fillStyle = '#c9a07a';                       // head
     ctx.fillRect(x + w * 0.08, y, w * 0.84, unit * 4);
 
+    // Look at whatever the arm is reaching for, else the way you last moved.
+    const face = p.aim ? (Math.sign(p.aim.x - p.x) || p.facing) : p.facing;
+
     ctx.fillStyle = '#1b1b1f';                       // eye, facing-aware
-    const eyeX = p.facing >= 0 ? x + w * 0.55 : x + w * 0.25;
+    const eyeX = face >= 0 ? x + w * 0.55 : x + w * 0.25;
     ctx.fillRect(eyeX, y + unit * 1.6, w * 0.16, unit * 0.9);
 
     if (p.hurtFlash > 0) {
@@ -390,6 +430,102 @@ export class Renderer {
       ctx.fillRect(x, y, w, h);
     }
 
+    this.drawArm(ctx, p, face, heldId, x + w / 2, y + unit * 4.8, unit);
+    ctx.restore();
+  }
+
+  /**
+   * The front arm and whatever it's holding, pivoting at the shoulder. Drawn
+   * facing right and mirrored, with angles in canvas convention: 0 is straight
+   * ahead, positive swings downward.
+   *
+   * A swing winds up over the shoulder, snaps down through the aim point
+   * (connecting at SWING_IMPACT), then settles back to rest.
+   */
+  drawArm(ctx, p, face, heldId, sx, sy, unit) {
+    ctx.save();
+    ctx.translate(sx, sy);
+    ctx.scale(face, 1);
+
+    let aim = 0;
+    if (p.aim) {
+      const dx = (p.aim.x * SCALE - sx) * face;
+      const dy = p.aim.y * SCALE - sy;
+      aim = Math.max(-1.35, Math.min(1.45, Math.atan2(dy, Math.max(dx, 1))));
+    }
+    const rest = p.aim ? aim + 0.3 : 1.05;
+    const raised = aim - 1.9;
+    const strike = aim + 0.35;
+    const wind = SWING_IMPACT * 0.6;              // wind-up ends here
+
+    const t = p.swingProgress;
+    let angle = rest;
+    if (t !== null) {
+      if (t < wind) angle = lerp(rest, raised, easeOut(t / wind));
+      else if (t < SWING_IMPACT) angle = lerp(raised, strike, easeIn((t - wind) / (SWING_IMPACT - wind)));
+      else angle = lerp(strike, rest, easeInOut((t - SWING_IMPACT) / (1 - SWING_IMPACT)));
+    }
+
+    const it = heldId !== AIR ? item(heldId) : null;
+    const gripped = it && GRIPPED.has(it.icon);
+    const armLen = unit * 4.6;
+    const toolLen = SCALE * 0.82;
+
+    // Motion trail behind the tool's tip, from the top of the wind-up to
+    // where it is now, fading out once the blow has landed.
+    if (gripped && t !== null && t > wind && t < SWING_IMPACT + 0.3) {
+      const tipAt = (a) => {
+        const hx = Math.cos(a) * armLen + Math.cos(a + GRIP_ANGLE) * toolLen * 0.9;
+        const hy = Math.sin(a) * armLen + Math.sin(a + GRIP_ANGLE) * toolLen * 0.9;
+        return { r: Math.hypot(hx, hy), a: Math.atan2(hy, hx) };
+      };
+      const from = tipAt(raised);
+      const to = tipAt(angle);
+      const fade = t < SWING_IMPACT ? 1 : 1 - (t - SWING_IMPACT) / 0.3;
+      ctx.strokeStyle = `rgba(255,255,255,${0.4 * fade})`;
+      ctx.lineWidth = unit * 1.6;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.arc(0, 0, (from.r + to.r) / 2, from.a, to.a);
+      ctx.stroke();
+    }
+
+    ctx.rotate(angle);
+    ctx.fillStyle = '#3b7a4a';                       // sleeve
+    ctx.fillRect(-unit * 0.8, -unit * 0.8, unit * 2.4, unit * 1.6);
+    ctx.fillStyle = '#c9a07a';                       // forearm
+    ctx.fillRect(unit * 1.6, -unit * 0.75, armLen - unit * 1.6, unit * 1.5);
+    ctx.fillStyle = '#b48c68';                       // fist
+    ctx.fillRect(armLen - unit * 1.1, -unit * 0.8, unit * 1.3, unit * 1.6);
+
+    const tex = heldId !== AIR ? textures[heldId] : null;
+    if (tex) {
+      ctx.translate(armLen, 0);
+      if (gripped) {
+        // Rotate the icon's diagonal onto the grip line, handle in the fist.
+        ctx.rotate(GRIP_ANGLE + Math.PI / 4);
+        ctx.drawImage(tex, -toolLen * (4 / 16), -toolLen * (12 / 16), toolLen, toolLen);
+      } else {
+        // Blocks and loose items sit upright in the hand.
+        const size = SCALE * (it ? 0.5 : 0.42);
+        ctx.rotate(-angle * 0.6);
+        ctx.drawImage(tex, -size * 0.2, -size * 0.8, size, size);
+      }
+    }
+    ctx.restore();
+  }
+
+  /** Chips thrown off a struck block; they fade as they fall. */
+  drawParticles(ctx, list) {
+    if (!list.length) return;
+    ctx.save();
+    for (const p of list) {
+      const k = p.age / p.life;
+      ctx.globalAlpha = 1 - k * k;
+      ctx.fillStyle = p.colour;
+      const s = p.size * SCALE;
+      ctx.fillRect(p.x * SCALE - s / 2, p.y * SCALE - s / 2, s, s);
+    }
     ctx.restore();
   }
 
@@ -629,29 +765,72 @@ export class Renderer {
     ctx.restore();
   }
 
-  drawHighlight(ctx, hover, mining) {
-    const px = hover.x * SCALE;
-    const py = hover.y * SCALE;
+  drawHighlight(ctx, world, player, hover, mining, light) {
+    let px = hover.x * SCALE;
+    let py = hover.y * SCALE;
+    let size = SCALE;
 
-    ctx.strokeStyle = 'rgba(0,0,0,0.75)';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(px + 1, py + 1, SCALE - 2, SCALE - 2);
+    const active = mining && mining.x === hover.x && mining.y === hover.y;
+    const flash = active && mining.flash > 0 ? mining.flash / HIT_FLASH : 0;
+    const id = active ? mining.id : AIR;
 
-    if (mining && mining.progress > 0) {
-      // Crack overlay: more, darker slashes as the block gives way.
+    // Struck: the block jolts away from the blow and pops slightly larger --
+    // large enough that the copy fully covers the block drawn underneath.
+    if (flash > 0 && textures[id]) {
+      const pop = SCALE * 0.14 * flash;
+      const dx = hover.x + 0.5 - player.x;
+      const dy = hover.y + 0.5 - player.centerY;
+      const len = Math.hypot(dx, dy) || 1;
+      px += (dx / len) * pop * 0.5 - pop / 2;
+      py += (dy / len) * pop * 0.5 - pop / 2;
+      size += pop;
+
+      ctx.drawImage(textures[id], px, py, size, size);
+      const shade = BLOCKS[id].emit >= 0.4 ? 0 : this.shadeAt(world, hover.x, hover.y, 1 - light);
+      if (shade > 0.02 && shadowMasks[id]) {
+        ctx.globalAlpha = shade;
+        ctx.drawImage(shadowMasks[id], px, py, size, size);
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    if (active && mining.progress > 0) {
+      // Crack overlay: more, darker slashes as the block gives way. The
+      // darkening goes through the block's silhouette, like depth shading.
       const stage = Math.floor(mining.progress * 5);
-      ctx.fillStyle = `rgba(0,0,0,${0.12 + stage * 0.11})`;
-      ctx.fillRect(px, py, SCALE, SCALE);
+      if (shadowMasks[id]) {
+        ctx.globalAlpha = 0.12 + stage * 0.11;
+        ctx.drawImage(shadowMasks[id], px, py, size, size);
+        ctx.globalAlpha = 1;
+      }
 
       ctx.strokeStyle = 'rgba(10,10,12,0.85)';
       ctx.lineWidth = 2;
       ctx.beginPath();
       for (let i = 0; i <= stage; i++) {
         const t = (i + 1) / 6;
-        ctx.moveTo(px + SCALE * t, py);
-        ctx.lineTo(px + SCALE * (t * 0.6), py + SCALE);
+        ctx.moveTo(px + size * t, py);
+        ctx.lineTo(px + size * (t * 0.6), py + size);
       }
       ctx.stroke();
+    }
+
+    // The flash goes over the cracks, white through the block's own shape, so
+    // it reads even on a nearly broken block.
+    const white = flash > 0 ? this.flashMaskFor(id) : null;
+    if (white) {
+      ctx.globalAlpha = 0.8 * flash;
+      ctx.drawImage(white, px, py, size, size);
+      ctx.globalAlpha = 1;
+    }
+
+    ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(px + 1, py + 1, size - 2, size - 2);
+    if (flash > 0) {
+      ctx.strokeStyle = `rgba(255,255,255,${0.9 * flash})`;
+      ctx.lineWidth = 3;
+      ctx.strokeRect(px + 1.5, py + 1.5, size - 3, size - 3);
     }
   }
 }

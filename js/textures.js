@@ -518,6 +518,27 @@ const ITEM_PAINTERS = {
     g.fillRect(12, 3, 2, 2);
   },
 
+  // Same grip as the sword -- handle bottom-left, head top-right -- so the
+  // renderer can hold either one the same way.
+  pickaxe: (g, base) => {
+    g.strokeStyle = '#6b4c2b';
+    g.lineWidth = 2;
+    g.beginPath(); g.moveTo(3, 14); g.lineTo(10, 7); g.stroke();     // handle
+    g.strokeStyle = css(shade(base, 0.7));
+    g.lineWidth = 3;
+    g.lineCap = 'round';
+    g.beginPath();
+    g.moveTo(4, 3); g.quadraticCurveTo(12.5, 3.5, 13, 12);           // head
+    g.stroke();
+    g.strokeStyle = css(base);
+    g.lineWidth = 1.6;
+    g.beginPath();
+    g.moveTo(4.5, 3); g.quadraticCurveTo(12.5, 3.5, 12.8, 11.5);
+    g.stroke();
+    g.fillStyle = css(shade(base, 1.45), 0.9);
+    g.fillRect(9, 3, 2, 1);
+  },
+
   bow: (g, base) => {
     g.strokeStyle = css(base);
     g.lineWidth = 2;

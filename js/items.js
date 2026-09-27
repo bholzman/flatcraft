@@ -13,6 +13,13 @@ export const GOLDEN_SWORD = 259;
 export const DIAMOND_SWORD = 260;
 export const NETHERITE_SWORD = 261;
 
+export const WOODEN_PICKAXE = 262;
+export const STONE_PICKAXE = 263;
+export const IRON_PICKAXE = 264;
+export const GOLDEN_PICKAXE = 265;
+export const DIAMOND_PICKAXE = 266;
+export const NETHERITE_PICKAXE = 267;
+
 export const FLINT_AND_STEEL = 268;
 export const FLINT = 269;
 export const BOW = 270;
@@ -74,6 +81,19 @@ sword(IRON_SWORD, 'Iron Sword', 6, '#d8d8de');
 sword(GOLDEN_SWORD, 'Golden Sword', 4, '#f0cf52');
 sword(DIAMOND_SWORD, 'Diamond Sword', 7, '#5fe3dc');
 sword(NETHERITE_SWORD, 'Netherite Sword', 8, '#5a4f52');
+
+// --- pickaxes: `speed` multiplies mining speed on the materials in `digs`.
+// Gold is fastest and weakest, as in Minecraft. There's no tier gating yet:
+// a bare hand still mines everything, a pickaxe just gets there sooner.
+const pickaxe = (id, name, speed, damage, tint) =>
+  def(id, name, { kind: 'pickaxe', speed, damage, digs: ['stone', 'glass'], stack: 1, tint, icon: 'pickaxe' });
+
+pickaxe(WOODEN_PICKAXE, 'Wooden Pickaxe', 1.6, 2, '#9c7440');
+pickaxe(STONE_PICKAXE, 'Stone Pickaxe', 2.2, 3, '#8a8a92');
+pickaxe(IRON_PICKAXE, 'Iron Pickaxe', 3, 4, '#d8d8de');
+pickaxe(GOLDEN_PICKAXE, 'Golden Pickaxe', 4.5, 2, '#f0cf52');
+pickaxe(DIAMOND_PICKAXE, 'Diamond Pickaxe', 4, 5, '#5fe3dc');
+pickaxe(NETHERITE_PICKAXE, 'Netherite Pickaxe', 4.8, 6, '#5a4f52');
 
 def(FLINT_AND_STEEL, 'Flint and Steel', { kind: 'igniter', stack: 1, tint: '#b8b8c0', icon: 'igniter' });
 def(FLINT, 'Flint', { tint: '#4a4a52' });
@@ -137,11 +157,18 @@ export function nameOf(id) {
   return isItem(id) ? (R[id]?.name ?? 'Unknown') : block(id).name;
 }
 
+/** Mining speed multiplier the held item `heldId` gets against `material`. */
+export function miningSpeed(heldId, material) {
+  const it = R[heldId];
+  return it?.digs?.includes(material) ? it.speed : 1;
+}
+
 /** How many of `id` fit in one slot. */
 export function stackSize(id) {
   return isItem(id) ? (R[id]?.stack ?? 64) : 64;
 }
 
 export const SWORDS = Object.values(R).filter((i) => i.kind === 'sword').map((i) => i.id);
+export const PICKAXES = Object.values(R).filter((i) => i.kind === 'pickaxe').map((i) => i.id);
 export const POTIONS = Object.values(R).filter((i) => i.kind === 'potion').map((i) => i.id);
 export const ALL_ITEMS = Object.values(R).map((i) => i.id);

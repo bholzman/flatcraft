@@ -79,6 +79,12 @@ export const PLAYER_H = 1.8;
 export const REACH = 5.5;            // how far the player can mine/place, in blocks
 export const CREATIVE_REACH = 9;     // longer arms in creative mode
 
+// Arm swing. Holding the button loops swings; each one lands a strike on the
+// block being dug (sound, flash, debris) at SWING_IMPACT of the way through.
+export const SWING_TIME = 0.3;       // seconds per swing
+export const SWING_IMPACT = 0.5;     // fraction of the swing where it connects
+export const HIT_FLASH = 0.16;       // seconds a struck block glows for
+
 // Creative flight.
 export const FLY_ACCEL = 190;
 export const FLY_SPEED = 20;

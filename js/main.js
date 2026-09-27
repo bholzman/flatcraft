@@ -1,10 +1,10 @@
 import {
   FIXED_DT, MAX_FRAME_DT, REACH, CREATIVE_REACH, REALMS, START_REALM, PORTAL_DWELL,
-  PORTAL_LINK_RANGE, DAY_LENGTH, START_PHASE, dayLightAt, phaseName, clockAt,
+  PORTAL_LINK_RANGE, DAY_LENGTH, START_PHASE, HIT_FLASH, dayLightAt, phaseName, clockAt,
 } from './config.js';
 import {
   AIR, CHEST, CRAFTING_TABLE, FURNACE, GRAVEL, OBSIDIAN, NETHER_PORTAL, END_PORTAL,
-  block, isBreakable, isSolid, dropOf,
+  block, isBreakable, isSolid, dropOf, materialOf,
 } from './blocks.js';
 import { rollLoot } from './loot.js';
 import { World } from './world.js';
@@ -20,6 +20,8 @@ import { portalOnSurface } from './worldgen.js';
 import { Minimap } from './minimap.js';
 import { RECIPES, fuelValue } from './recipes.js';
 import * as I from './items.js';
+import { sfx } from './sfx.js';
+import { Particles } from './particles.js';
 
 const PORTAL_IDS = new Set([NETHER_PORTAL, END_PORTAL]);
 
@@ -49,7 +51,8 @@ class Game {
     this.minimap = new Minimap(document.getElementById('minimap'));
     this.hud = new HUD(this);
 
-    this.mining = null;          // { x, y, id, progress }
+    this.particles = new Particles();
+    this.mining = null;          // { x, y, id, progress, flash }
     this.hover = null;           // block cell under the cursor, if in reach
     this.target = null;          // mob under the cursor, if in reach
     this.inspect = null;         // what the cursor is over, for the tooltip
@@ -120,6 +123,8 @@ class Game {
     this.fps = this.fps * 0.9 + (1 / Math.max(dt, 1e-6)) * 0.1;
 
     this.handleInput(dt);
+    this.updateSwing(dt);
+    this.particles.update(dt);
 
     this.accumulator += dt;
     while (this.accumulator >= FIXED_DT) {
@@ -188,6 +193,7 @@ class Game {
     if (input.consumePress('KeyG')) this.cycleMode();
     if (input.consumePress('F3')) this.hud.toggleDebug();
     if (input.consumePress('KeyM')) this.minimap.toggle();
+    if (input.consumePress('KeyN')) this.hud.announce(sfx.toggleMute() ? 'Sound off' : 'Sound on');
     // Travel is for exploring, so spectators get it too; the block palette is
     // only useful to someone who can actually place a block.
     if (this.mode !== 'survival' && input.consumePress('KeyB')) this.hud.toggleBiomes();
@@ -647,7 +653,7 @@ class Game {
   get attackDamage() {
     const held = this.inventory.held;
     const it = I.item(held.count > 0 ? held.id : -1);
-    const base = it?.kind === 'sword' ? it.damage : 1;
+    const base = it?.kind === 'sword' || it?.kind === 'pickaxe' ? it.damage : 1;
     return base + (this.player.effect('strength') ?? 0);
   }
 
@@ -661,7 +667,17 @@ class Game {
   attack(mob) {
     if (this.attackCooldown > 0) return;
     this.attackCooldown = 0.45;
+    this.player.startSwing();
+    sfx.swing(this.holdingTool);
+    sfx.mobHit();
     this.hitMob(mob, this.attackDamage, this.player.x);
+  }
+
+  /** A sword or pickaxe in hand: swings harder, and sounds like it. */
+  get holdingTool() {
+    const held = this.inventory.held;
+    const kind = held.count > 0 ? I.item(held.id)?.kind : null;
+    return kind === 'sword' || kind === 'pickaxe';
   }
 
   mobFire(mob, target) {
@@ -801,18 +817,56 @@ class Game {
 
     // Restart progress whenever the cursor moves to a different block.
     if (!this.mining || this.mining.x !== target.x || this.mining.y !== target.y || this.mining.id !== id) {
-      this.mining = { x: target.x, y: target.y, id, progress: 0 };
+      this.mining = { x: target.x, y: target.y, id, progress: 0, flash: 0 };
     }
 
-    this.mining.progress += this.creative ? 1 : dt / block(id).hardness;
+    const held = this.inventory.held;
+    const speed = held.count > 0 ? I.miningSpeed(held.id, materialOf(id)) : 1;
+    this.mining.progress += this.creative ? 1 : (dt / block(id).hardness) * speed;
 
     if (this.mining.progress >= 1) {
       this.world.set(target.x, target.y, AIR);
+      sfx.break(materialOf(id));
+      this.particles.debris(id, target.x, target.y, this.player.x, this.player.centerY, 12, 1.3);
       // Gravel sometimes yields flint, so flint and steel stays renewable.
       const drop = id === GRAVEL && Math.random() < 0.15 ? I.FLINT : dropOf(id);
       this.inventory.add(drop, 1);
       this.mining = null;
     }
+  }
+
+  /**
+   * The arm. Holding the button keeps it swinging, and every swing that
+   * connects with the block being dug lands a strike: a sound matched to the
+   * block's material, a flash, and a spray of chips. Mining progress itself
+   * still accrues continuously, so this changes the feel, not the timing.
+   */
+  updateSwing(dt) {
+    const p = this.player;
+    const input = this.input;
+    const active = this.canInteract && !p.dead && !this.hud.anyPanelOpen();
+
+    // Swinging at a mob is paced by the attack cooldown instead (see attack).
+    const digging = active && input.mouse.left && !this.target;
+    if (digging && !p.swinging) {
+      p.startSwing();
+      sfx.swing(this.holdingTool);
+    }
+
+    p.aim = active && (input.mouse.left || p.swinging)
+      ? this.renderer.screenToWorld(input.mouse.x, input.mouse.y)
+      : null;
+
+    if (p.advanceSwing(dt) && this.mining) this.strike();
+    if (this.mining) this.mining.flash = Math.max(0, this.mining.flash - dt);
+  }
+
+  /** One blow landing on the block being mined. */
+  strike() {
+    const { x, y, id } = this.mining;
+    this.mining.flash = HIT_FLASH;
+    sfx.hit(materialOf(id));
+    this.particles.debris(id, x, y, this.player.x, this.player.centerY, 5);
   }
 
   updatePlacing() {
@@ -830,7 +884,7 @@ class Game {
       return;
     }
 
-    // Swords, bows and potions are used, not placed.
+    // Swords, tools, bows and potions are used, not placed.
     if (held.count > 0 && I.isItem(held.id)) return;
 
     if (!this.world.isReplaceable(x, y)) return;
@@ -978,6 +1032,7 @@ overlay.classList.remove('hidden');
 
 document.getElementById('start').addEventListener('click', () => {
   overlay.classList.add('hidden');
+  sfx.unlock();          // audio needs a user gesture, and this is one
   game.start();
   game.canvas.focus();
 });

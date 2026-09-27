@@ -573,7 +573,15 @@ export class HUD {
     }
 
     const bits = [];
-    bits.push(def.hardness === null ? 'unbreakable' : `${def.hardness}s to mine`);
+    if (def.hardness === null) {
+      bits.push('unbreakable');
+    } else {
+      // Quote the time with whatever's in hand, so a pickaxe visibly pays off.
+      const held = this.game.inventory.held;
+      const speed = held.count > 0 ? I.miningSpeed(held.id, def.material) : 1;
+      const secs = def.hardness / speed;
+      bits.push(`${+secs.toFixed(2)}s to mine${speed > 1 ? ` (${I.nameOf(held.id)})` : ''}`);
+    }
     if (def.drops !== undefined && def.drops !== blockId) bits.push(`drops ${block(def.drops).name}`);
     if (isLiquid(blockId)) bits.push('liquid');
     else if (isDecoration(blockId)) bits.push('walk-through');
