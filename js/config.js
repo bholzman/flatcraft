@@ -96,6 +96,7 @@ export const FLY_DAMP = 0.0008;      // remaining fraction of velocity after 1s
 
 export const FIXED_DT = 1 / 120;     // physics step
 export const MAX_FRAME_DT = 0.25;    // clamp so a stalled tab doesn't teleport the player
+export const AUTOSAVE_INTERVAL = 5;  // seconds between saves to localStorage
 
 // Camera. The player stays pinned to the middle of the screen in both axes, so
 // digging down or climbing up is what changes how much sky vs. underground is

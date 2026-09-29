@@ -39,6 +39,21 @@ keep running a stale copy of an edited module until you hard-reload.
 
 Stand in a portal for a moment to change realm.
 
+## Saving
+
+The game saves itself to the browser's localStorage every few seconds, and
+again when the tab is hidden or closed. **Continue** on the start screen picks
+up where you left off: every realm you've changed, the inventory, chests you've
+opened, furnace fuel, portals you've built and where they lead, your position,
+health, effects, mode and the time of day. Mobs aren't saved; the world
+repopulates on load. **New world** (click twice) erases the save and starts
+over on a fresh random seed.
+
+A world isn't stored whole. It regenerates from its seed, and the save holds
+only the cells that differ from what the seed made, so an afternoon of digging
+comes to kilobytes. That also means a save is tied to the generator: change
+world generation and an old save's edits land on different terrain.
+
 ## Modes
 
 | Mode | Movement | World |
@@ -191,12 +206,14 @@ js/
   inventory.js    hotbar slots
   hud.js          hotbar DOM + debug readout
   main.js         wiring, fixed-timestep game loop
+  save.js         localStorage save: seed, changed cells, player, inventory
 ```
 
 ## Design notes
 
 - **World** is a flat `Uint8Array` of block ids, `WORLD_W × WORLD_H`. Block ids
-  are stable numbers so the array stays cheap to store and serialize later.
+  are stable numbers, which is what lets a save record changed cells by id.
+  Each world keeps a copy of what it generated, and a save is the difference.
 - **Terrain** comes from layered 1-D value noise on a seeded PRNG — same seed,
   same world. Caves are carved where two offset noise fields agree; ores are
   random-walk veins with depth thresholds.
@@ -254,6 +271,6 @@ js/recipes.js    crafting and smelting recipes, fuel values
 
 ## Not built yet
 
-Tool tiers, hunger, world save/load, chunked streaming, sound, breeding,
-raids. The Ender Dragon exists and fights, but has no boss mechanics
-— no perches, healing crystals, or end-of-fight sequence.
+Tool tiers, hunger, chunked streaming, sound, breeding, raids. The Ender
+Dragon exists and fights, but has no boss mechanics — no perches, healing
+crystals, or end-of-fight sequence.

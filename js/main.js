@@ -1,6 +1,6 @@
 import {
   FIXED_DT, MAX_FRAME_DT, REACH, CREATIVE_REACH, REALMS, START_REALM, PORTAL_DWELL,
-  PORTAL_LINK_RANGE, DAY_LENGTH, START_PHASE, dayLightAt, phaseName, clockAt,
+  PORTAL_LINK_RANGE, DAY_LENGTH, START_PHASE, AUTOSAVE_INTERVAL, dayLightAt, phaseName, clockAt,
 } from './config.js';
 import {
   AIR, CHEST, CRAFTING_TABLE, FURNACE, GRAVEL, OBSIDIAN, NETHER_PORTAL, END_PORTAL,
@@ -21,6 +21,7 @@ import { PROFESSIONS } from './mobs.js';
 import { portalOnSurface } from './worldgen.js';
 import { Minimap } from './minimap.js';
 import { RECIPES, fuelValue } from './recipes.js';
+import { loadSave, writeSave, clearSave, setAsideSave, restoreGame } from './save.js';
 import * as I from './items.js';
 
 const PORTAL_IDS = new Set([NETHER_PORTAL, END_PORTAL]);
@@ -70,6 +71,9 @@ class Game {
     this.attackCooldown = 0;
     this.useCooldown = 0;
     this.respawnTimer = 0;
+    this.saveTimer = 0;
+    this.persist = true;         // false once the save is being thrown away
+    this.saveFailed = false;
     this.running = false;
     this.accumulator = 0;
     this.lastTime = 0;
@@ -77,6 +81,15 @@ class Game {
 
     this.renderer.snapTo(this.player);
     this.frame = this.frame.bind(this);
+  }
+
+  /** Save to localStorage, and say so once if the browser won't take it. */
+  save() {
+    this.saveTimer = 0;
+    if (!this.persist) return;
+    const ok = writeSave(this);
+    if (!ok && !this.saveFailed) this.hud.announce("Couldn't save: browser storage is full or off");
+    this.saveFailed = !ok;
   }
 
   /** 0 = sunrise, 0.25 = noon, 0.5 = sunset, 0.75 = midnight. */
@@ -132,6 +145,9 @@ class Game {
       this.step(FIXED_DT);
       this.accumulator -= FIXED_DT;
     }
+
+    this.saveTimer += dt;
+    if (this.saveTimer >= AUTOSAVE_INTERVAL) this.save();
 
     this.renderer.follow(this.player, dt);
     this.renderer.draw(this);
@@ -1169,14 +1185,58 @@ class Game {
 
 // ---- bootstrap ----
 
-const game = new Game(0xf1a7c2a7);
-const overlay = document.getElementById('overlay');
-overlay.classList.remove('hidden');
+// A saved game regenerates from its seed and then has its changes put back.
+// A save that won't restore is set aside, and the page starts over without it.
+const saved = loadSave();
+const game = new Game(saved?.seed);
+if (saved) {
+  try {
+    restoreGame(game, saved);
+  } catch (err) {
+    console.error('Flatcraft: could not restore the saved game', err);
+    game.persist = false;
+    setAsideSave();
+    location.reload();
+  }
+}
 
-document.getElementById('start').addEventListener('click', () => {
+// Save on the way out as well as on the timer.
+const saveNow = () => { if (game.running) game.save(); };
+addEventListener('pagehide', saveNow);
+document.addEventListener('visibilitychange', () => { if (document.hidden) saveNow(); });
+
+const overlay = document.getElementById('overlay');
+const startButton = document.getElementById('start');
+const newWorldButton = document.getElementById('new-world');
+overlay.classList.remove('hidden');
+if (saved) {
+  startButton.textContent = 'Continue';
+  newWorldButton.classList.remove('hidden');
+}
+document.getElementById('save-note').textContent = saved
+  ? `Continuing world ${game.seed}, saved in this browser.`
+  : 'Your world saves automatically in this browser.';
+
+startButton.addEventListener('click', () => {
   overlay.classList.add('hidden');
   game.start();
   game.canvas.focus();
+});
+
+// Starting over erases the save, so it takes a second click.
+let confirmNewWorld = null;
+newWorldButton.addEventListener('click', () => {
+  if (!confirmNewWorld) {
+    newWorldButton.textContent = 'Click again to erase this world';
+    confirmNewWorld = setTimeout(() => {
+      confirmNewWorld = null;
+      newWorldButton.textContent = 'New world';
+    }, 3000);
+    return;
+  }
+  game.persist = false;
+  clearSave();
+  location.reload();
 });
 
 window.game = game;   // handy for poking at things from the console

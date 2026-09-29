@@ -723,3 +723,19 @@ button {
 }
 
 button:hover { background: #578d44; }
+
+.actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+button.secondary { background: #3c3c46; border-color: #25252c; }
+button.secondary:hover { background: #4a4a56; }
+button.hidden { display: none; }
+
+#save-note {
+  margin: 14px 0 0;
+  font-size: 12px;
+  opacity: 0.55;
+}

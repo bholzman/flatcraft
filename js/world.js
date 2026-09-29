@@ -28,8 +28,18 @@ export class World {
     this.blockData = new Map();   // "x,y" -> chest contents, spawner type, ...
     this.fires = new Map();       // "x,y" -> { x, y, age, life, wait }; see fire.js
     this.primed = new Map();      // "x,y" -> lit TNT and its fuse
+    this.edits = 0;               // bumped by every write; see changes()
+    this.packed = null;           // changed cells as of some edit count
 
     generate(this);
+
+    // What the seed made, so a save only has to hold what's changed since.
+    this.pristine = {
+      grid: this.grid.slice(),
+      trees: this.trees.slice(),
+      data: new Map([...this.blockData].map(([key, d]) => [key, JSON.stringify(d)])),
+      portals: this.portals.length,
+    };
 
     for (let x = 0; x < this.width; x++) this.recalcSurface(x);
     // The generator writes fire straight into the grid (the Nether's eternal
@@ -77,6 +87,7 @@ export class World {
     // must not leave its loot behind for whatever is placed there next.
     const was = this.grid[this.idx(x, y)];
     if (was !== id) this.blockData.delete(`${x},${y}`);
+    this.edits++;
     this.grid[this.idx(x, y)] = id;
     this.trees[this.idx(x, y)] = 0;      // a placed log is a wall, not a tree
     if (id === FIRE) this.track(x, y);
@@ -96,7 +107,9 @@ export class World {
 
   /** Unchecked write used by the generator; skips the surface recalc. */
   put(x, y, id) {
-    if (this.inBounds(x, y)) this.grid[this.idx(x, y)] = id;
+    if (!this.inBounds(x, y)) return;
+    this.grid[this.idx(x, y)] = id;
+    this.edits++;
   }
 
   /** Start keeping time for a fire in (x, y); fire.js decides what it does. */
@@ -109,6 +122,7 @@ export class World {
     if (!this.inBounds(x, y)) return;
     this.grid[this.idx(x, y)] = id;
     this.trees[this.idx(x, y)] = 1;
+    this.edits++;
   }
 
   /**
@@ -166,6 +180,78 @@ export class World {
       }
     }
     return floating;
+  }
+
+  // ---- saving ----
+
+  /**
+   * Everything that differs from what the seed generated, or null if nothing
+   * does. `cells` packs each changed cell as a varint index delta and its
+   * block id; block data holds only the entries that changed, with null for
+   * one that's gone; portals are the ones built since generation.
+   */
+  changes() {
+    const { data, portals } = this.pristine;
+
+    // Scanning the grid is the one slow part, so skip it if nothing's written.
+    if (this.packed?.edits !== this.edits) this.packed = { edits: this.edits, cells: this.packCells() };
+    const { cells } = this.packed;
+
+    const changed = [];
+    for (const [key, d] of this.blockData) {
+      // A spawner's cooldown is a live countdown, not something to keep.
+      const kept = d.kind === 'spawner' ? { ...d, cooldown: 0 } : d;
+      if (JSON.stringify(kept) !== data.get(key)) changed.push([key, kept]);
+    }
+    for (const key of data.keys()) {
+      if (!this.blockData.has(key)) changed.push([key, null]);
+    }
+
+    const built = this.portals.slice(portals).map(({ x, y, to, built }) => ({ x, y, to, built }));
+
+    if (!cells.length && !changed.length && !built.length) return null;
+    return { cells, data: changed, portals: built };
+  }
+
+  /** Every cell whose block (or tree flag) differs from generation, packed. */
+  packCells() {
+    const { grid, trees } = this.pristine;
+    const bytes = [];
+    let last = 0;
+    for (let i = 0; i < this.grid.length; i++) {
+      if (this.grid[i] === grid[i] && this.trees[i] === trees[i]) continue;
+      for (let d = i - last; ; d >>>= 7) {
+        if (d < 0x80) { bytes.push(d); break; }
+        bytes.push((d & 0x7f) | 0x80);
+      }
+      bytes.push(this.grid[i]);
+      last = i;
+    }
+    return Uint8Array.from(bytes);
+  }
+
+  /** Reapply what changes() recorded, onto a freshly generated world. */
+  restore({ cells, data, portals }) {
+    let i = 0;
+    for (let p = 0; p < cells.length;) {
+      let d = 0;
+      for (let shift = 0; ; shift += 7) {
+        const b = cells[p++];
+        d |= (b & 0x7f) << shift;
+        if (b < 0x80) break;
+      }
+      i += d;
+      // Through set(), so fires relight and the surface follows -- and, like
+      // any block the game changes, a generated tree cell becomes a wall.
+      this.set(i % this.width, Math.floor(i / this.width), cells[p++]);
+    }
+    // After the cells: set() drops a replaced block's data, and this puts back
+    // whatever the save says belongs there.
+    for (const [key, d] of data) {
+      if (d === null) this.blockData.delete(key);
+      else this.blockData.set(key, d);
+    }
+    this.portals.push(...portals);
   }
 
   /** The structure whose footprint contains this cell, if any. */
