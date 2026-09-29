@@ -75,6 +75,7 @@ export const LIQUID_DRAG = 0.62;
 export const LIQUID_SINK = 0.35;
 export const SWIM_SPEED = 7.5;
 export const WATER_JUMP_TIME = 0.3;  // seconds a jump out of water ignores liquid drag
+export const CLIMB_SPEED = 5;        // up or down a ladder, blocks per second
 
 // Breath, in seconds. It runs down while the head is under water, then
 // drowning takes DROWN_DAMAGE every DROWN_INTERVAL until you surface.

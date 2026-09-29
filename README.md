@@ -21,7 +21,8 @@ keep running a stale copy of an edited module until you hard-reload.
 | Input | Action |
 | --- | --- |
 | `A` / `D` (or arrows) | Move |
-| `Space` / `W` | Jump (hold for higher) |
+| `Space` / `W` | Jump (hold for higher); climb a ladder |
+| `S` / `Shift` | Climb down a ladder; fly down |
 | Left click | Mine the highlighted block |
 | Right click | Place the selected block |
 | `1`–`9` / scroll | Select hotbar slot |
@@ -71,6 +72,10 @@ mobs and arrows; a log you place yourself is an ordinary wall. Doors let the
 player through but stop mobs. With your head under water you have 15 seconds
 of air, then drown a heart a second; you can still jump off the bottom or out
 of the surface onto a ledge.
+
+Ladders climb with `W` and descend with `S`; with neither you hang on, and
+catching one breaks a fall. They work the same in water, where climbing beats
+swimming.
 
 ## Crafting
 

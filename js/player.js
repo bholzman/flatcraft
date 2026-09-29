@@ -2,9 +2,9 @@ import {
   GRAVITY, MOVE_ACCEL, MOVE_SPEED, AIR_ACCEL_SCALE, GROUND_FRICTION, AIR_FRICTION,
   JUMP_SPEED, MAX_FALL_SPEED, COYOTE_TIME, JUMP_BUFFER, PLAYER_W, PLAYER_H,
   LIQUID_DRAG, LIQUID_SINK, SWIM_SPEED, FLY_ACCEL, FLY_SPEED, FLY_DAMP,
-  WATER_JUMP_TIME, MAX_AIR, AIR_REFILL, DROWN_DAMAGE, DROWN_INTERVAL,
+  WATER_JUMP_TIME, MAX_AIR, AIR_REFILL, DROWN_DAMAGE, DROWN_INTERVAL, CLIMB_SPEED,
 } from './config.js';
-import { isLiquid, LAVA, WATER, FIRE } from './blocks.js';
+import { block, isLiquid, LAVA, WATER, FIRE } from './blocks.js';
 
 export class Player {
   constructor(world, spawn) {
@@ -20,6 +20,7 @@ export class Player {
     this.coyote = 0;
     this.jumpBuffer = 0;
     this.inLiquid = false;
+    this.climbing = false;   // on a ladder
     this.flying = false;
     this.noclip = false;     // spectator: drift straight through the world
 
@@ -135,8 +136,11 @@ export class Player {
       return;
     }
 
-    // Fall damage: measured from wherever the fall began, forgiving three blocks.
-    if (this.onGround || this.inLiquid) {
+    // Fall damage: measured from wherever the fall began, forgiving three
+    // blocks. Catching a ladder breaks the fall, as in Minecraft.
+    if (this.climbing) {
+      this.fallFrom = null;
+    } else if (this.onGround || this.inLiquid) {
       if (this.fallFrom !== null) {
         const drop = this.y - this.fallFrom;
         if (drop > 3 && !this.inLiquid) this.hurt(Math.floor(drop - 3), null, true);
@@ -219,25 +223,18 @@ export class Player {
 
   update(dt, intent) {
     this.inLiquid = this.submerged();
+    this.climbing = !this.flying && this.onLadder();
 
     if (this.flying) {
       this.fly(dt, intent);
       return;
     }
-
-    // --- horizontal ---
-    const accel = MOVE_ACCEL * (this.onGround ? 1 : AIR_ACCEL_SCALE);
-    if (intent.move !== 0) {
-      this.vx += intent.move * accel * dt;
-      this.facing = intent.move;
-    } else {
-      const friction = this.onGround ? GROUND_FRICTION : AIR_FRICTION;
-      const drop = friction * dt * Math.abs(this.vx);
-      this.vx -= Math.sign(this.vx) * Math.min(Math.abs(this.vx), drop + friction * dt * 0.5);
+    if (this.climbing) {
+      this.climb(dt, intent);
+      return;
     }
-    const boost = (this.effect('speed') ?? 1) * (this.effect('slowness') ?? 1);
-    const topSpeed = (this.inLiquid ? SWIM_SPEED : MOVE_SPEED) * boost;
-    this.vx = Math.max(-topSpeed, Math.min(topSpeed, this.vx));
+
+    this.walk(dt, intent);
 
     // --- jump, with coyote time + input buffering so it feels forgiving ---
     this.coyote = this.onGround ? COYOTE_TIME : Math.max(0, this.coyote - dt);
@@ -279,6 +276,40 @@ export class Player {
       }
     }
 
+    this.moveAndCollide(this.vx * dt, this.vy * dt);
+  }
+
+  /**
+   * Run (or swim) sideways, slowing to a stop when there's no input. With
+   * `grip` -- footing, or a ladder -- that stop is quick; in the air it isn't.
+   */
+  walk(dt, intent, grip = this.onGround) {
+    const accel = MOVE_ACCEL * (grip ? 1 : AIR_ACCEL_SCALE);
+    if (intent.move !== 0) {
+      this.vx += intent.move * accel * dt;
+      this.facing = intent.move;
+    } else {
+      const friction = grip ? GROUND_FRICTION : AIR_FRICTION;
+      const drop = friction * dt * Math.abs(this.vx);
+      this.vx -= Math.sign(this.vx) * Math.min(Math.abs(this.vx), drop + friction * dt * 0.5);
+    }
+    const boost = (this.effect('speed') ?? 1) * (this.effect('slowness') ?? 1);
+    const topSpeed = (this.inLiquid ? SWIM_SPEED : MOVE_SPEED) * boost;
+    this.vx = Math.max(-topSpeed, Math.min(topSpeed, this.vx));
+  }
+
+  /**
+   * On a ladder, up climbs and down descends, and with neither you hold on.
+   * That goes for a ladder in water too: climbing wins over swimming. The
+   * ladder counts as footing -- you don't slide off it sideways, and a jump
+   * pressed just as you clear the top still fires.
+   */
+  climb(dt, intent) {
+    this.walk(dt, intent, true);
+    this.vy = ((intent.down ? 1 : 0) - (intent.jumpHeld ? 1 : 0)) * CLIMB_SPEED;
+    this.coyote = COYOTE_TIME;
+    this.jumpBuffer = 0;
+    this.waterJump = 0;
     this.moveAndCollide(this.vx * dt, this.vy * dt);
   }
 
@@ -355,6 +386,12 @@ export class Player {
         if (this.world.blocksMovementAt(x, y)) return true;
       }
     }
+    return false;
+  }
+
+  /** True while any part of the hitbox is on something climbable. */
+  onLadder() {
+    for (const id of this.occupied()) if (block(id).climbable) return true;
     return false;
   }
 
