@@ -263,7 +263,9 @@ export class Renderer {
   /**
    * Dark fill behind every underground column, so caves read as hollows rather
    * than windows onto the sky. Keyed off the fixed terrain baseline, not the
-   * live surface, or tree canopies would cast it across open air.
+   * live surface, or tree canopies would cast it across open air -- but only
+   * down to where the column is still open to the sky, so mining out the top
+   * block shows sky behind it rather than cave.
    */
   drawBackdrop(ctx, world) {
     const { x0, y0, x1, y1 } = this.viewBounds(world);
@@ -278,7 +280,7 @@ export class Renderer {
         continue;
       }
 
-      const top = Math.max(world.ground[x], y0);
+      const top = Math.max(world.skyFloor(x), y0);
       if (top > y1) continue;
 
       if (!overworld) {

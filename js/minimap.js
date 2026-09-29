@@ -89,6 +89,13 @@ export class Minimap {
     const base = hexToRgb(sky);
     const skyRgb = base.map((c, i) => Math.round(c * light + [10, 12, 28][i] * (1 - light)));
 
+    // Where each column stops being open sky; see World.skyFloor.
+    const skyFloor = new Int32Array(this.cols);
+    for (let rx = 0; rx < this.cols; rx++) {
+      const wx = Math.floor(originX + rx * stepX);
+      skyFloor[rx] = wx >= 0 && wx < world.width ? world.skyFloor(wx) : 0;
+    }
+
     for (let ry = 0; ry < this.rows; ry++) {
       const wy = Math.floor(originY + ry * stepY);
       for (let rx = 0; rx < this.cols; rx++) {
@@ -102,8 +109,8 @@ export class Minimap {
 
         const id = wy < 0 ? AIR : world.grid[wy * world.width + wx];
         if (id === AIR) {
-          // Above ground reads as sky; below it, as unlit rock.
-          const underground = wy > world.ground[wx];
+          // Open to the sky reads as sky; below that, as unlit rock.
+          const underground = wy >= skyFloor[rx];
           if (underground) {
             data[i] = 26; data[i + 1] = 23; data[i + 2] = 32;
           } else {

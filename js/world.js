@@ -158,6 +158,18 @@ export class World {
   }
 
   /**
+   * The first row of a column that's shut off from the sky: the generated
+   * terrain line, or deeper where the column has been dug open from above.
+   * Generated trees, plants and water don't shut the sky out.
+   */
+  skyFloor(x) {
+    for (let y = Math.max(0, this.surface[x]); y < this.height; y++) {
+      if (this.blocksMovementAt(x, y)) return Math.max(y, this.ground[x]);
+    }
+    return this.height;
+  }
+
+  /**
    * Somewhere inside a box where the player's body fits, searching outward
    * from the middle column. Prefers a spot with a floor under it; falls back
    * to any non-solid gap (water counts -- you can swim, you can't be stuck in
